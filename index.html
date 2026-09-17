@@ -15,7 +15,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png"/>
 <link rel="apple-touch-icon" href="/apple-touch-icon.png"/>
 <title>Пульс Києва</title>
-<!-- pulse-chrome-v18-airfield-red-20260918 -->
+<!-- pulse-chrome-v19-map-feed-20260918 -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
@@ -324,8 +324,10 @@ function ago(ts) {
 const KYIV_PT = { name: "Київ", lat: 50.4501, lon: 30.5234 };
 const MAP_PLACES = [
   [/славутич/i, "Славутич", 51.52, 30.757],
+  [/іванк[іо]в/i, "Іванків", 50.933, 29.917],
   [/чзв|чорнобил|прип/i, "ЧЗВ", 51.389, 30.099],
   [/водосховищ/i, "Київське водосховище", 50.9, 30.55],
+  [/димер/i, "Димер", 50.787, 30.302],
   [/чернігів/i, "Чернігів", 51.498, 31.289],
   [/вишгород/i, "Вишгород", 50.584, 30.49],
   [/бровар/i, "Бровари", 50.511, 30.791],
@@ -333,6 +335,10 @@ const MAP_PLACES = [
   [/бучан|буча\b/i, "Буча", 50.548, 30.221],
   [/ірпін|ирпен/i, "Ірпінь", 50.521, 30.25],
   [/гостомел/i, "Гостомель", 50.569, 30.265],
+  [/бородянк/i, "Бородянка", 50.644, 29.92],
+  [/чабан/i, "Чабани", 50.34, 30.422],
+  [/теремк/i, "Теремки", 50.367, 30.454],
+  [/святошин/i, "Святошин", 50.457, 30.39],
   [/одес/i, "Одеса", 46.482, 30.723],
   [/миколаїв/i, "Миколаїв", 46.975, 32],
   [/харків/i, "Харків", 49.993, 36.23],
@@ -366,11 +372,11 @@ function mapPlaceAfter(text, rx) {
 function parseVector(text) {
   const t = String(text || "").toLowerCase();
   if (/відбій|чисто\.|без ударних|немає бпла|немає цілей/.test(t)) return null;
-  if (!/балістик|ракет|бпла|шахед|реактив|дрон|геран|вектор руху|курс на|повз |через |летить/.test(t)) return null;
+  if (!/балістик|ракет|бпла|шахед|реактив|дрон|геран|вектор|курс|повз |через |летить|увага по/.test(t)) return null;
   const all = mapPlaces(t);
-  let toP = mapPlaceAfter(t, /на |до /);
-  if (/до вас|на київ|в бік києва/.test(t)) toP = KYIV_PT;
-  const fromP = mapPlaceAfter(t, /через |повз |з боку |біля |над /) || all.find(function (p) { return !toP || p.name !== toP.name; }) || all[0] || null;
+  let toP = mapPlaceAfter(t, /курс(ом)? на |летить на |на |до /);
+  if (/до вас|на київ|в бік києва|на столиц/.test(t)) toP = KYIV_PT;
+  const fromP = mapPlaceAfter(t, /через |повз |з боку |біля |над |з /) || all.find(function (p) { return !toP || p.name !== toP.name; }) || null;
   let card = null;
   if (/з півноч|з білорус|з гомел/.test(t)) card = 180;
   else if (/на північ/.test(t)) card = 0;
@@ -384,16 +390,17 @@ function parseVector(text) {
   let from, bearing, title;
   if (fromP && toP && fromP.name !== toP.name) {
     from = [fromP.lat, fromP.lon]; bearing = geoBearing(fromP, toP); title = fromP.name + " → " + toP.name;
-  } else if (fromP && /до вас|на київ|вектор руху до вас/.test(t)) {
-    from = [fromP.lat, fromP.lon]; bearing = geoBearing(fromP, KYIV_PT); title = fromP.name + " → Київ";
   } else if (toP && card != null) {
-    from = geoDest(toP.lat, toP.lon, (card + 180) % 360, 55); bearing = card; title = "→ " + toP.name;
+    from = geoDest(toP.lat, toP.lon, (card + 180) % 360, 45); bearing = card; title = "→ " + toP.name;
+  } else if (toP) {
+    const out = geoBearing(KYIV_PT, toP);
+    from = geoDest(toP.lat, toP.lon, out, 45); bearing = (out + 180) % 360; title = "→ " + toP.name;
   } else if (fromP) {
     from = [fromP.lat, fromP.lon]; bearing = geoBearing(fromP, KYIV_PT); title = fromP.name + " → Київ";
   } else return null;
   const color = kind === "ballistic" || kind === "missile" ? "#e07070" : (toP && toP.name === "Київ" ? "#7dcfb6" : "#d4b37a");
   const name = kind === "ballistic" ? "балістика" : kind === "missile" ? "ракета" : "БпЛА";
-  return { from: from, to: geoDest(from[0], from[1], bearing, 70), bearing: Math.round(bearing), color: color, label: "приблизно · " + name + " · " + title };
+  return { from: from, to: geoDest(from[0], from[1], bearing, 55), bearing: Math.round(bearing), color: color, label: "приблизно · " + name + " · " + title };
 }
 function vectorsFromFeed() {
   const now = Date.now(), out = [], seen = {};
@@ -407,7 +414,7 @@ function vectorsFromFeed() {
   });
   return out;
 }
-let pulseMap = null, pulseLayer = null;
+let pulseMap = null, pulseLayer = null, lastVecKey = "";
 function drawMapArrow(v) {
   const L = window.L;
   if (!L || !pulseLayer) return;
@@ -433,22 +440,26 @@ function syncMap() {
   const L = window.L;
   if (!L) return;
   if (!pulseMap) {
-    pulseMap = L.map("pulse-map").setView([50.2, 31.1], 6);
+    pulseMap = L.map("pulse-map").setView([50.45, 30.52], 8);
     L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
       attribution: "&copy; OSM &copy; CARTO", subdomains: "abcd", maxZoom: 18
     }).addTo(pulseMap);
     pulseLayer = L.layerGroup().addTo(pulseMap);
   }
   const list = vectorsFromFeed();
+  const key = list.map(function (v) { return v.label; }).join("|");
   pulseLayer.clearLayers();
   L.circleMarker([KYIV_PT.lat, KYIV_PT.lon], { radius: 6, color: "#7dcfb6", weight: 2, fillOpacity: 0.15 }).addTo(pulseLayer);
   list.forEach(drawMapArrow);
-  if (list.length) pulseMap.fitBounds(list.flatMap(function (v) { return [v.from, v.to]; }), { padding: [40, 40], maxZoom: 8 });
+  if (list.length && key !== lastVecKey) {
+    pulseMap.fitBounds(list.flatMap(function (v) { return [v.from, v.to]; }), { padding: [40, 40], maxZoom: 9 });
+  }
+  lastVecKey = key;
   setTimeout(function () { if (pulseMap) pulseMap.invalidateSize(); }, 80);
   const cnt = document.getElementById("map-count");
   const empty = document.getElementById("map-empty");
-  if (cnt) cnt.textContent = list.length + " векторів · усі джерела";
-  if (empty) empty.textContent = list.length ? "Приблизний курс з відкритих каналів, включно з доданими." : "Зараз у повідомленнях немає напряму.";
+  if (cnt) cnt.textContent = list.length + " за сповіщеннями";
+  if (empty) empty.textContent = list.length ? "Курс з нових повідомлень · оновлення 15 с." : "Немає свіжого курсу в сповіщеннях.";
 }
 let tab = "home", q = "", cat = "Усі", messages = [];
 let extraDraft = "", extraError = "", extraBusy = false;
@@ -1138,6 +1149,7 @@ async function loadFeed() {
         : "off";
       seenIds = new Set(messages.map(function (m) { return m.id; }));
       render();
+      if (tab === "map") syncMap();
     }
   } catch (e) {}
 }
