@@ -15,7 +15,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png"/>
 <link rel="apple-touch-icon" href="/apple-touch-icon.png"/>
 <title>Пульс Києва</title>
-<!-- pulse-chrome-v13-ios-standalone-safe-20260918 -->
+<!-- pulse-chrome-v14-ios-dock-fill-20260918 -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap"/>
 <style>
 :root {
@@ -27,21 +27,28 @@
   color: var(--ink); background: var(--canvas);
 }
 * { box-sizing: border-box; }
-html, body, #root {
-  margin: 0; height: 100%; max-height: 100%;
+html {
+  margin: 0;
+  height: 100%;
+  height: -webkit-fill-available;
+  background: #111214;
+}
+body, #root {
+  margin: 0;
+  min-height: 100%;
+  min-height: -webkit-fill-available;
+  min-height: 100dvh;
   overscroll-behavior-y: none;
   background: #09090b;
 }
 .app {
-  display: flex; height: 100%; max-height: 100%;
+  display: flex;
+  min-height: 100%;
+  min-height: -webkit-fill-available;
+  min-height: 100dvh;
+  height: var(--app-h, 100dvh);
   background: var(--canvas);
   overflow: hidden;
-}
-@supports (height: 100svh) {
-  html, body, #root, .app { height: 100svh; max-height: 100svh; }
-}
-@media (display-mode: standalone) {
-  html, body, #root, .app { height: 100svh; max-height: 100svh; overflow: hidden; }
 }
 .ptr {
   position: fixed; left: 0; right: 0; top: 0; z-index: 80;
@@ -181,7 +188,7 @@ button:not(:disabled) { cursor: pointer; }
   .side, .rail { display: none !important; }
   .body { grid-template-columns: 1fr; }
   .search { width: min(52vw, 220px); }
-  .main { padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px)); }
+  .main { padding-bottom: calc(52px + var(--sab, env(safe-area-inset-bottom, 0px))); }
   .stats { grid-template-columns: 1fr 1fr; }
   .dock {
     display: grid;
@@ -193,7 +200,7 @@ button:not(:disabled) { cursor: pointer; }
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
     border-top: 1px solid var(--hair);
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-bottom: var(--sab, env(safe-area-inset-bottom, 0px));
     padding-left: env(safe-area-inset-left, 0px);
     padding-right: env(safe-area-inset-right, 0px);
   }
@@ -205,11 +212,19 @@ button:not(:disabled) { cursor: pointer; }
   .dock button.on { color: var(--ink); }
   .dock button.on svg { color: var(--signal); }
 }
-@media (display-mode: standalone) and (max-width: 960px) {
-  .main { padding-bottom: calc(58px + env(safe-area-inset-bottom, 0px)); }
-  .top {
-    padding-top: calc(6px + env(safe-area-inset-top, 0px));
-    background: #111214;
+@supports (-webkit-touch-callout: none) {
+  @media (display-mode: standalone) and (max-width: 960px) {
+    html, body, #root, .app {
+      min-height: -webkit-fill-available;
+      height: -webkit-fill-available;
+      max-height: none;
+    }
+    .dock {
+      padding-bottom: max(34px, env(safe-area-inset-bottom, 0px));
+    }
+    .main {
+      padding-bottom: calc(52px + max(34px, env(safe-area-inset-bottom, 0px)));
+    }
   }
 }
 </style>
@@ -623,6 +638,23 @@ function filtered() {
     return (m.text + " " + m.s.title + " " + m.s.user).toLowerCase().includes(query);
   });
 }
+function pinDock() {
+  const root = document.documentElement;
+  const vv = window.visualViewport;
+  const h = Math.max(window.innerHeight, vv ? Math.round(vv.height + vv.offsetTop) : 0);
+  root.style.setProperty("--app-h", h + "px");
+  const standalone = window.navigator.standalone === true || window.matchMedia("(display-mode: standalone)").matches;
+  const ios = /iP(hone|od|ad)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const dock = document.querySelector(".dock");
+  if (!dock || window.matchMedia("(min-width: 961px)").matches) return;
+  dock.style.bottom = "0px";
+  if (standalone && ios) {
+    const gap = Math.max(0, h - Math.round(dock.getBoundingClientRect().bottom));
+    const sab = Math.max(34, gap);
+    root.style.setProperty("--sab", sab + "px");
+    dock.style.paddingBottom = sab + "px";
+  }
+}
 function render() {
   const titles = TABS.find(function (t) { return t.id === tab; });
   const list = filtered();
@@ -726,6 +758,7 @@ function render() {
   document.querySelectorAll("[data-rm]").forEach(function (b) {
     b.onclick = function () { removeExtraSource(b.getAttribute("data-rm")); };
   });
+  requestAnimationFrame(pinDock);
 }
 let savedScroll = 0;
 const ptr = { y0: 0, pulling: false, armed: false, busy: false, dist: 0 };
@@ -864,6 +897,8 @@ if ("serviceWorker" in navigator) {
 setInterval(loadFeed, 15000);
 document.addEventListener("pointerdown", unlockAudio, { once: true });
 document.addEventListener("touchstart", unlockAudio, { once: true });
+window.addEventListener("resize", pinDock);
+if (window.visualViewport) window.visualViewport.addEventListener("resize", pinDock);
 render();
 loadFeed();
 </script>
