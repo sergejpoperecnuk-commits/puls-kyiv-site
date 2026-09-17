@@ -17,7 +17,25 @@
   color: var(--ink); background: var(--canvas);
 }
 * { box-sizing: border-box; }
-html, body, #root { margin: 0; height: 100%; }
+html, body, #root { margin: 0; height: 100%; overscroll-behavior-y: none; }
+.ptr {
+  position: fixed; left: 0; right: 0; top: 0; z-index: 80;
+  height: calc(56px + env(safe-area-inset-top));
+  display: flex; align-items: flex-end; justify-content: center; gap: 8px;
+  padding-bottom: 10px; pointer-events: none;
+  transform: translateY(-100%);
+  color: var(--quiet); font-size: 12px; font-weight: 500;
+}
+.ptr.dragging { transition: none; }
+.ptr:not(.dragging) { transition: transform .25s ease; }
+.ptr.busy { color: var(--signal); }
+.ptr-spinner {
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid rgb(236 236 232 / .16);
+  border-top-color: var(--signal);
+}
+.ptr.busy .ptr-spinner, .ptr.armed .ptr-spinner { animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 button, input { font: inherit; }
 a { color: inherit; }
 button:not(:disabled) { cursor: pointer; }
@@ -51,7 +69,7 @@ button:not(:disabled) { cursor: pointer; }
   color: var(--ink); border-radius: 999px; padding: 10px 14px; outline: none;
 }
 .body { flex: 1; display: grid; grid-template-columns: 1fr 280px; min-height: 0; }
-.main { overflow: auto; padding: 20px 16px 24px; }
+.main { overflow: auto; padding: 20px 16px 24px; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch; }
 .rail { border-left: 1px solid var(--hair); overflow: auto; padding: 22px 18px; background: var(--panel); }
 .hero { background: var(--panel); border: 1px solid var(--hair); border-radius: 16px; padding: 16px; margin-bottom: 18px; }
 .hero-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
@@ -107,6 +125,7 @@ button:not(:disabled) { cursor: pointer; }
 </style>
 </head>
 <body>
+<div id="ptr" class="ptr" aria-hidden="true"><div class="ptr-spinner"></div><span class="ptr-label">Потягніть</span></div>
 <div id="root"></div>
 <script type="module">
 const SOURCES = [
@@ -163,6 +182,8 @@ function filtered() {
 function render() {
   const titles = TABS.find(function (t) { return t.id === tab; });
   const list = filtered();
+  const prevMain = document.querySelector(".main");
+  savedScroll = prevMain ? prevMain.scrollTop : savedScroll;
   let main = "";
   if (tab === "home") {
     main = '<div class="hero"><div class="hero-top"><div><div class="kicker">Огляд</div><h3 style="margin:6px 0 0">Наживо по Києву</h3></div></div>' + sirenBlock() + '<p class="muted" style="margin:10px 2px 0">' + messages.length + " повідомлень з Telegram</p></div>" + list.slice(0, 8).map(card).join("");
@@ -196,12 +217,69 @@ function render() {
     inp.value = q;
     inp.oninput = function (e) { q = e.target.value; if (q) tab = "search"; render(); };
   }
+  const newMain = document.querySelector(".main");
+  if (newMain) {
+    newMain.scrollTop = savedScroll;
+    bindPtr(newMain);
+  }
+}
+let savedScroll = 0;
+const ptr = { y0: 0, pulling: false, armed: false, busy: false, dist: 0 };
+function ptrEl() { return document.getElementById("ptr"); }
+function showPtr(dist, state) {
+  const el = ptrEl();
+  if (!el) return;
+  const d = Math.max(0, Math.min(96, dist));
+  el.classList.toggle("dragging", state === "pull" || state === "armed");
+  el.classList.toggle("armed", state === "armed");
+  el.classList.toggle("busy", state === "busy");
+  el.style.transform = d > 0 || state === "busy" ? "translateY(" + Math.min(d, 72) + "px)" : "translateY(-100%)";
+  const label = el.querySelector(".ptr-label");
+  if (label) {
+    label.textContent = state === "busy" ? "Оновлюємо…" : state === "armed" ? "Відпустіть" : "Потягніть";
+  }
+}
+function bindPtr(main) {
+  main.addEventListener("touchstart", function (e) {
+    if (ptr.busy || !e.touches || !e.touches[0]) return;
+    if (main.scrollTop > 4) { ptr.pulling = false; return; }
+    ptr.y0 = e.touches[0].clientY;
+    ptr.pulling = true;
+    ptr.armed = false;
+    ptr.dist = 0;
+  }, { passive: true });
+  main.addEventListener("touchmove", function (e) {
+    if (!ptr.pulling || ptr.busy) return;
+    if (main.scrollTop > 4) { ptr.pulling = false; showPtr(0, ""); return; }
+    const y = e.touches[0].clientY;
+    const dy = y - ptr.y0;
+    if (dy < 8) return;
+    e.preventDefault();
+    ptr.dist = Math.min(96, dy * 0.55);
+    ptr.armed = ptr.dist > 56;
+    showPtr(ptr.dist, ptr.armed ? "armed" : "pull");
+  }, { passive: false });
+  main.addEventListener("touchend", function () {
+    if (!ptr.pulling || ptr.busy) return;
+    ptr.pulling = false;
+    if (ptr.armed) refresh();
+    else showPtr(0, "");
+  });
+}
+async function refresh() {
+  if (ptr.busy) return;
+  ptr.busy = true;
+  ptr.armed = false;
+  showPtr(64, "busy");
+  await loadFeed();
+  ptr.busy = false;
+  showPtr(0, "");
 }
 async function loadFeed() {
   try {
-    const data = await (await fetch("/api/feed")).json();
-    if (data.ok && data.messages && data.messages.length) {
-      messages = data.messages;
+    const data = await (await fetch("/api/feed", { cache: "no-store" })).json();
+    if (data.ok) {
+      if (data.messages && data.messages.length) messages = data.messages;
       if (data.alert) alertStatus = data.alert;
       render();
     }
