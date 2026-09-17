@@ -394,10 +394,6 @@ function drawMapArrow(v) {
   const right = geoDest(v.to[0], v.to[1], v.bearing - 150, 9);
   L.polygon([v.to, left, right], { color: v.color, fillColor: v.color, fillOpacity: 1, weight: 0 }).addTo(pulseLayer);
   L.circleMarker(v.from, { radius: 6, color: v.color, fillColor: v.color, fillOpacity: 1, weight: 0 }).addTo(pulseLayer);
-  L.tooltip({ permanent: true, direction: "top", className: "vec", offset: [0, -8] })
-    .setLatLng(v.to)
-    .setContent(v.label + (v.src ? " · " + v.src : ""))
-    .addTo(pulseLayer);
 }
 function syncMap() {
   const overlay = document.getElementById("map-overlay");
