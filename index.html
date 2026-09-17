@@ -140,11 +140,7 @@ const SEED = [
   ["od", "Офіційний канал Київської обласної військової адміністрації — @kyivoda.", 190],
   ["pt", "Інформація з відкритих джерел про повітряну тривогу в Києві.", 260],
 ];
-const LIVE = [
-  ["kn", "Тиша в ефірі не означає відбій. Чекайте сигнал у офіційних каналах."],
-  ["wm", "Моніторинг триває. Бережіть себе. Не фіксуйте місця вибухів."],
-  ["va", "Орієнтуйтесь на офіційні звернення КМВА."],
-];
+const LIVE = [];
 const CATS = ["Усі", "Тривога", "Офіційне"];
 const TABS = [
   { id: "home", label: "Головна", title: "Наживо" },
@@ -173,7 +169,7 @@ function card(m) {
     <div><b>${m.s.title}</b><span class="${tagClass}">${m.s.cat}</span><br>
     <small>${ago(m.t)} · сьогодні</small></div></div>
     <p>${m.text}</p>
-    <footer><a href="https://t.me/${m.s.user}" target="_blank" rel="noreferrer">Відкрити в Telegram ↗</a>
+    <footer><a href="${m.url || ("https://t.me/" + m.s.user)}" target="_blank" rel="noreferrer">Відкрити в Telegram ↗</a>
     <span>@${m.s.user}</span></footer></article>`;
 }
 function filtered() {
@@ -191,7 +187,7 @@ function render() {
   if (tab === "home") {
     main = `<div class="hero"><div class="hero-top"><div>
       <div class="kicker">Огляд</div><h3 style="margin:6px 0 0">Наживо по Києву</h3>
-      <p class="muted">Останнє · щойно · локальна стрічка</p></div>
+      <p class="muted">Останнє · Telegram · дозволені канали</p></div>
       <div class="live"><span class="dot"></span> Наживо</div></div>
       <div class="stats">
         <div class="stat"><span>СЬОГОДНІ</span><b>${messages.length}</b></div>
@@ -242,11 +238,25 @@ function render() {
   const inp = document.getElementById("q");
   inp?.addEventListener("input", (e) => { q = e.target.value; if (q) tab = "search"; render(); inp.focus(); const el=document.getElementById("q"); if(el){ el.value=q; el.setSelectionRange(q.length,q.length);} });
 }
-setInterval(() => {
-  const row = LIVE[Math.floor(Math.random()*LIVE.length)];
-  messages = [{ id: String(Date.now()), s: src(row[0]), text: row[1], t: Date.now(), fresh: true }, ...messages].slice(0,40);
-  render();
-}, 28000);
+setInterval(loadFeed, 25000);
+async function loadFeed() {
+  try {
+    const res = await fetch("/api/feed");
+    const data = await res.json();
+    if (!data.ok || !Array.isArray(data.messages) || !data.messages.length) return;
+    const known = new Set(messages.map((m) => m.id));
+    const incoming = data.messages.map((m) => ({
+      ...m,
+      s: m.s,
+      fresh: !known.has(m.id),
+    }));
+    messages = incoming;
+    render();
+  } catch (e) {
+    /* keep last */
+  }
+}
 render();
+loadFeed();
 </script>
 </body></html>
