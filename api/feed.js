@@ -11,15 +11,17 @@ const SOURCES = [
 ];
 
 const BY_USER = Object.fromEntries(SOURCES.map((s) => [s.user.toLowerCase(), s]));
+const AMP = "\u0026";
 
 function decodeEntities(value) {
   return value
-    .replace(/&nbsp;/g, " ")
-    .replace(/&/g, "&")
-    .replace(/"/g, '"')
-    .replace(/&#39;|'/g, "'")
-    .replace(/</g, "<")
-    .replace(/>/g, ">")
+    .split(`${AMP}nbsp;`).join(" ")
+    .split(`${AMP}amp;`).join("&")
+    .split(`${AMP}quot;`).join('"')
+    .split(`${AMP}#39;`).join("'")
+    .split(`${AMP}apos;`).join("'")
+    .split(`${AMP}lt;`).join("<")
+    .split(`${AMP}gt;`).join(">")
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/p>/gi, "\n")
     .replace(/<[^>]+>/g, "")
