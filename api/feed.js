@@ -326,7 +326,20 @@ export default async function handler(req, res) {
     sourceCount: sources.length,
     scraperOk: all.length > 0,
   };
-  const messages = all.slice(0, 60);
+  const messages = all.slice(0, 80);
+  if (extras.length) {
+    const pinned = [];
+    const seenPin = new Set();
+    for (const src of extras) {
+      const hit = all.find((m) => m.s && m.s.user && m.s.user.toLowerCase() === src.user.toLowerCase());
+      if (hit && !seenPin.has(hit.id)) {
+        seenPin.add(hit.id);
+        pinned.push(hit);
+      }
+    }
+    const rest = all.filter((m) => !seenPin.has(m.id));
+    messages.splice(0, messages.length, ...pinned.concat(rest).slice(0, 80));
+  }
   const alert = buildAlert(messages, cityWrap, oblastWrap, ajaxOblast, ajaxCity);
   res.status(200).json({ ok: true, at: Date.now(), count: messages.length, stats, alert, messages });
 }
