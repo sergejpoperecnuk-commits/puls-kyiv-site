@@ -12,7 +12,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png"/>
 <link rel="apple-touch-icon" href="/apple-touch-icon.png"/>
 <title>Пульс Києва</title>
-<!-- pulse-chrome-v4-official-siren-20260917 -->
+<!-- pulse-chrome-v5-bucha-sound-20260917 -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap"/>
 <style>
 :root {
@@ -241,10 +241,19 @@ function heroBlock() {
 function pushOn() {
   return localStorage.getItem("pulse-push") === "1" && typeof Notification !== "undefined" && Notification.permission === "granted";
 }
+function soundOn() {
+  return localStorage.getItem("pulse-sound") !== "0";
+}
+function setSound(on) {
+  localStorage.setItem("pulse-sound", on ? "1" : "0");
+  if (on) unlockAudio();
+  else stopSiren();
+  render();
+}
 function pushStatusText() {
   if (typeof Notification === "undefined") return "Цей браузер не вміє пуш.";
   if (Notification.permission === "denied") return "Браузер заборонив сповіщення. Дозвольте їх у налаштуваннях сайту.";
-  if (pushOn()) return "Увімкнено: лише офіційна сирена.";
+  if (pushOn()) return "Увімкнено: пуш лише для Бучанського району.";
   return "Вимкнено.";
 }
 let seenIds = new Set();
@@ -326,7 +335,7 @@ async function setPush(on) {
     localStorage.setItem("pulse-push", "1");
     unlockAudio();
     try { await navigator.serviceWorker.register("/sw.js"); } catch (e) {}
-    notifyUser("Пульс Києва", "Офіційна тривога: звук і пуш увімкнено", "pulse-on");
+    notifyUser("Пульс Києва", "Пуш для Бучанського району увімкнено", "pulse-on");
   } else {
     localStorage.setItem("pulse-push", "0");
   }
@@ -355,7 +364,7 @@ function render() {
   savedScroll = prevMain ? prevMain.scrollTop : savedScroll;
   let main = "";
   if (tab === "home") {
-    main = heroBlock() + (pushOn() ? "" : '<button class="toggle" id="push-home" style="margin-bottom:14px"><span>Увімкнути звук офіційної тривоги</span><span class="switch"><i></i></span></button>') + list.slice(0, 8).map(card).join("");
+    main = heroBlock() + (soundOn() ? "" : '<button class="toggle" id="sound-home" style="margin-bottom:14px"><span>Увімкнути звук для Бучанського району</span><span class="switch"><i></i></span></button>') + list.slice(0, 8).map(card).join("");
   } else if (tab === "feed") {
     main = list.map(card).join("") || '<p class="muted">Чекаємо пости…</p>';
   } else if (tab === "sources") {
@@ -365,8 +374,10 @@ function render() {
   } else if (tab === "search") {
     main = list.length ? list.map(card).join("") : '<p class="muted">Нічого не знайдено.</p>';
   } else {
-    main = '<div class="card"><p style="margin:0 0 8px"><b>Сповіщення</b></p><p class="muted">Звук і пуш лише з офіційних джерел: карта тривог, КМВА, Київська ОВА. Моніторингові канали в стрічці мовчать.</p></div>' +
-      '<button class="toggle' + (pushOn() ? " on" : "") + '" id="push-toggle"><span>Офіційна тривога</span><span class="switch"><i></i></span></button>' +
+    main = '<div class="card"><p style="margin:0 0 8px"><b>Сповіщення</b></p><p class="muted">Звук і пуш лише при офіційній тривозі в Бучанському районі (карта області / ОВА). Тривога по Києву без області звук не дає.</p></div>' +
+      '<button class="toggle' + (soundOn() ? " on" : "") + '" id="sound-toggle"><span>Звук тривоги</span><span class="switch"><i></i></span></button>' +
+      '<p class="muted" style="margin:10px 2px 16px">' + (soundOn() ? "Увімкнено: сирена для Бучанського району." : "Вимкнено.") + "</p>" +
+      '<button class="toggle' + (pushOn() ? " on" : "") + '" id="push-toggle"><span>Пуш-повідомлення</span><span class="switch"><i></i></span></button>' +
       '<p class="muted" id="push-status" style="margin:10px 2px 0">' + pushStatusText() + "</p>" +
       '<div class="card" style="margin-top:16px"><p class="muted" style="margin:0">Оновлення з публічних Telegram-каналів кожні 25 с. Свайп зверху вниз — оновити зараз.</p></div>';
   }
@@ -398,9 +409,13 @@ function render() {
   if (pushBtn) {
     pushBtn.onclick = function () { setPush(!pushOn()); };
   }
-  const pushHome = document.getElementById("push-home");
-  if (pushHome) {
-    pushHome.onclick = function () { setPush(true); };
+  const soundBtn = document.getElementById("sound-toggle");
+  if (soundBtn) {
+    soundBtn.onclick = function () { setSound(!soundOn()); };
+  }
+  const soundHome = document.getElementById("sound-home");
+  if (soundHome) {
+    soundHome.onclick = function () { setSound(true); };
   }
 }
 let savedScroll = 0;
@@ -463,15 +478,16 @@ async function loadFeed() {
       if (data.alert) alertStatus = data.alert;
       if (data.stats) feedStats = data.stats;
       if (bootDone) {
-        if (alertStatus.level !== lastAlertLevel && alertStatus.level === "red") {
-          playOfficialSiren();
+        const buchaAlert = alertStatus.level === "red" && alertStatus.bucha;
+        if (buchaAlert && lastAlertLevel !== "bucha-red") {
+          if (soundOn()) playOfficialSiren();
           notifyUser(alertStatus.title + " · " + alertStatus.where, alertStatus.detail, "pulse-alert");
-        } else if (alertStatus.level !== "red") {
+        } else if (!buchaAlert) {
           stopSiren();
         }
       }
       bootDone = true;
-      lastAlertLevel = alertStatus.level || "";
+      lastAlertLevel = alertStatus.level === "red" && alertStatus.bucha ? "bucha-red" : (alertStatus.level || "");
       seenIds = new Set(messages.map(function (m) { return m.id; }));
       render();
     }
