@@ -440,7 +440,7 @@ function watchBox() {
     const on = selected.indexOf(a.id) !== -1;
     return '<button class="toggle' + (on ? " on" : "") + '" data-watch="' + a.id + '"><span>' + a.name + '</span><span class="switch"><i></i></span></button>';
   }).join("");
-  return '<div class="card" style="margin-top:16px"><p style="margin:0 0 8px"><b>Ваш район</b></p><p class="muted" style="margin:0 0 10px">Оберіть район, де ви є. Сирена і пуш лише для нього. Балістика і МіГ-31 — завжди.</p>' +
+  return '<div class="card" style="margin-top:16px"><p style="margin:0 0 8px"><b>Ваш район</b></p><p class="muted" style="margin:0 0 10px">Оберіть район, де ви є. Повітряна тривога — сирена лише для нього. Балістика і виліт МіГ-31 — сирена завжди, всім районам.</p>' +
     rows +
     '<div class="watch-actions"><button type="button" id="watch-all">Усі райони</button><button type="button" id="watch-none">Скинути</button></div></div>';
 }
@@ -622,7 +622,7 @@ function render() {
   } else if (tab === "search") {
     main = list.length ? list.map(card).join("") : '<p class="muted">Нічого не знайдено.</p>';
   } else {
-    main = '<div class="card"><p style="margin:0 0 8px"><b>Сповіщення</b></p><p class="muted">Сирена 10 секунд, один раз: тривога в обраному районі, загроза балістики або виліт МіГ-31.</p></div>' +
+    main = '<div class="card"><p style="margin:0 0 8px"><b>Сповіщення</b></p><p class="muted">Повітряна тривога: сирена 10 секунд лише в обраному районі. Балістика і виліт МіГ-31: сирена завжди, для всіх районів, навіть якщо звук тривоги вимкнено.</p></div>' +
       '<button class="toggle' + (soundOn() ? " on" : "") + '" id="sound-toggle"><span>Звук тривоги</span><span class="switch"><i></i></span></button>' +
       '<p class="muted" style="margin:10px 2px 16px">' + (soundOn() ? (watchNames(readWatch()) ? "Увімкнено: сирена для " + watchNames(readWatch()) + "." : "Звук увімкнено. Оберіть район нижче.") : "Вимкнено.") + "</p>" +
       '<button class="toggle' + (pushOn() ? " on" : "") + '" id="push-toggle"><span>Пуш-повідомлення</span><span class="switch"><i></i></span></button>' +
@@ -816,17 +816,18 @@ async function loadFeed() {
       });
       if (changed) saveExtras(stored);
       if (bootDone) {
-        const sirenOn = alertStatus.level === "red" && alertStatus.siren;
+        const urgentKind = alertStatus.kind === "ballistic" || alertStatus.kind === "mig31";
+        const sirenOn = alertStatus.level === "red" && (alertStatus.siren || urgentKind);
         const sirenKey = sirenOn ? (alertStatus.kind || "air") + ":" + (alertStatus.where || "") + ":" + (alertStatus.since || 0) : "off";
         if (sirenOn && lastAlertLevel !== sirenKey) {
-          if (soundOn()) playOfficialSiren();
+          if (soundOn() || urgentKind) playOfficialSiren();
           notifyUser(alertStatus.title + " · " + alertStatus.where, alertStatus.detail, "pulse-alert");
         } else if (!sirenOn && Date.now() >= testBoostUntil) {
           stopSiren();
         }
       }
       bootDone = true;
-      lastAlertLevel = alertStatus.level === "red" && alertStatus.siren
+      lastAlertLevel = alertStatus.level === "red" && (alertStatus.siren || alertStatus.kind === "ballistic" || alertStatus.kind === "mig31")
         ? (alertStatus.kind || "air") + ":" + (alertStatus.where || "") + ":" + (alertStatus.since || 0)
         : "off";
       seenIds = new Set(messages.map(function (m) { return m.id; }));
