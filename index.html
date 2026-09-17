@@ -12,7 +12,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png"/>
 <link rel="apple-touch-icon" href="/apple-touch-icon.png"/>
 <title>Пульс Києва</title>
-<!-- pulse-chrome-v7-privacy-note-20260917 -->
+<!-- pulse-chrome-v8-ballistic-mig-4s-20260917 -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap"/>
 <style>
 :root {
@@ -341,8 +341,9 @@ function playOfficialSiren() {
     const gain = audioCtx.createGain();
     osc.type = "sawtooth";
     const start = audioCtx.currentTime;
+    const dur = 4;
     osc.frequency.setValueAtTime(560, start);
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < dur; i++) {
       const t = start + i;
       osc.frequency.setValueAtTime(560, t);
       osc.frequency.linearRampToValueAtTime(880, t + 0.48);
@@ -350,14 +351,15 @@ function playOfficialSiren() {
     }
     gain.gain.setValueAtTime(0.0001, start);
     gain.gain.exponentialRampToValueAtTime(0.11, start + 0.06);
-    gain.gain.setValueAtTime(0.11, start + 7.65);
-    gain.gain.exponentialRampToValueAtTime(0.0001, start + 8);
+    gain.gain.setValueAtTime(0.11, start + dur - 0.3);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + dur);
     osc.connect(gain).connect(audioCtx.destination);
     osc.start(start);
-    osc.stop(start + 8.05);
+    osc.stop(start + dur + 0.05);
     sirenOsc = { osc: osc, gain: gain };
+    osc.onended = function () { sirenOsc = null; };
   } catch (e) {}
-  if (navigator.vibrate) navigator.vibrate([220, 80, 220, 80, 420, 120, 420]);
+  if (navigator.vibrate) navigator.vibrate([200, 80, 200]);
 }
 function notifyUser(title, body, tag) {
   if (!pushOn()) return;
@@ -432,7 +434,7 @@ function render() {
   } else if (tab === "search") {
     main = list.length ? list.map(card).join("") : '<p class="muted">Нічого не знайдено.</p>';
   } else {
-    main = '<div class="card"><p style="margin:0 0 8px"><b>Сповіщення</b></p><p class="muted">Звук і пуш лише при офіційній тривозі в Бучанському районі (карта області / ОВА). Тривога по Києву без області звук не дає.</p></div>' +
+    main = '<div class="card"><p style="margin:0 0 8px"><b>Сповіщення</b></p><p class="muted">Сирена 4 секунди, один раз: офіційна тривога в Бучанському районі, загроза балістики або виліт МіГ-31. Без повтору, поки подія та сама.</p></div>' +
       '<button class="toggle' + (soundOn() ? " on" : "") + '" id="sound-toggle"><span>Звук тривоги</span><span class="switch"><i></i></span></button>' +
       '<p class="muted" style="margin:10px 2px 16px">' + (soundOn() ? "Увімкнено: сирена для Бучанського району." : "Вимкнено.") + "</p>" +
       '<button class="toggle' + (pushOn() ? " on" : "") + '" id="push-toggle"><span>Пуш-повідомлення</span><span class="switch"><i></i></span></button>' +
@@ -602,16 +604,19 @@ async function loadFeed() {
       });
       if (changed) saveExtras(stored);
       if (bootDone) {
-        const buchaAlert = alertStatus.level === "red" && alertStatus.bucha;
-        if (buchaAlert && lastAlertLevel !== "bucha-red") {
+        const sirenOn = alertStatus.level === "red" && alertStatus.siren;
+        const sirenKey = sirenOn ? (alertStatus.kind || "air") + ":" + (alertStatus.since || 0) : "off";
+        if (sirenOn && lastAlertLevel !== sirenKey) {
           if (soundOn()) playOfficialSiren();
           notifyUser(alertStatus.title + " · " + alertStatus.where, alertStatus.detail, "pulse-alert");
-        } else if (!buchaAlert) {
+        } else if (!sirenOn) {
           stopSiren();
         }
       }
       bootDone = true;
-      lastAlertLevel = alertStatus.level === "red" && alertStatus.bucha ? "bucha-red" : (alertStatus.level || "");
+      lastAlertLevel = alertStatus.level === "red" && alertStatus.siren
+        ? (alertStatus.kind || "air") + ":" + (alertStatus.since || 0)
+        : "off";
       seenIds = new Set(messages.map(function (m) { return m.id; }));
       render();
     }
