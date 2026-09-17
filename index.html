@@ -15,7 +15,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png"/>
 <link rel="apple-touch-icon" href="/apple-touch-icon.png"/>
 <title>Пульс Києва</title>
-<!-- pulse-chrome-v19-map-feed-20260918 -->
+<!-- pulse-chrome-v20-cities-20260918 -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
@@ -185,6 +185,12 @@ button:not(:disabled) { cursor: pointer; }
 }
 .muted { color: var(--quiet); font-size: 13px; line-height: 1.5; }
 .card { background: var(--panel); border: 1px solid var(--hair); border-radius: 16px; padding: 14px 16px; margin-bottom: 12px; }
+.city-pick { display: flex; gap: 8px; margin: 8px 0 12px; }
+.city-pick button {
+  flex: 1; border: 1px solid var(--hair); background: var(--raised); color: var(--quiet);
+  border-radius: 10px; padding: 10px 8px; font-weight: 650;
+}
+.city-pick button.on { background: var(--ink); color: var(--canvas); }
 .add-row { display: flex; gap: 8px; margin-bottom: 12px; }
 .add-row input {
   flex: 1; min-width: 0; background: var(--raised); border: 1px solid var(--hair);
@@ -285,17 +291,30 @@ button:not(:disabled) { cursor: pointer; }
 </div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="module">
+const CITIES = [
+  { id: "kyiv", name: "Київ", brand: "Пульс Києва", map: [50.4501, 30.5234] },
+  { id: "odesa", name: "Одеса", brand: "Пульс Одеси", map: [46.482, 30.723] },
+  { id: "vinnytsia", name: "Вінниця", brand: "Пульс Вінниці", map: [49.233, 28.468] },
+];
 const SOURCES = [
-  { id: "wm", title: "monitor", user: "war_monitor", cat: "Тривога", initials: "MO" },
-  { id: "kn", title: "Київське небо", user: "kyiv_nebo", cat: "Тривога", initials: "КН" },
-  { id: "pp", title: "ППО Київ", user: "ppo_kiev", cat: "Тривога", initials: "ПП" },
-  { id: "pt", title: "Повітряна тривога Київ", user: "airAlarm_Kyiv", cat: "Тривога", initials: "ПТ" },
-  { id: "ki", title: "Київ ІНФО", user: "kievinform_ua1", cat: "Тривога", initials: "КІ" },
-  { id: "mw", title: "monitorwar", user: "monitoringwar", cat: "Тривога", initials: "MW" },
-  { id: "ka", title: "Київ Моніторинг", user: "KyivAlarm", cat: "Тривога", initials: "КА" },
-  { id: "va", title: "КМВА", user: "VA_Kyiv", cat: "Офіційне", initials: "ВА" },
-  { id: "od", title: "Київська ОВА", user: "kyivoda", cat: "Офіційне", initials: "ОД" },
-  { id: "ps", title: "Повітряні Сили", user: "kpszsu", cat: "Офіційне", initials: "ПС" },
+  { id: "wm", title: "monitor", user: "war_monitor", cat: "Тривога", initials: "MO", city: "all" },
+  { id: "mw", title: "monitorwar", user: "monitoringwar", cat: "Тривога", initials: "MW", city: "all" },
+  { id: "ps", title: "Повітряні Сили", user: "kpszsu", cat: "Офіційне", initials: "ПС", city: "all" },
+  { id: "kn", title: "Київське небо", user: "kyiv_nebo", cat: "Тривога", initials: "КН", city: "kyiv" },
+  { id: "pp", title: "ППО Київ", user: "ppo_kiev", cat: "Тривога", initials: "ПП", city: "kyiv" },
+  { id: "pt", title: "Повітряна тривога Київ", user: "airAlarm_Kyiv", cat: "Тривога", initials: "ПТ", city: "kyiv" },
+  { id: "ki", title: "Київ ІНФО", user: "kievinform_ua1", cat: "Тривога", initials: "КІ", city: "kyiv" },
+  { id: "ka", title: "Київ Моніторинг", user: "KyivAlarm", cat: "Тривога", initials: "КА", city: "kyiv" },
+  { id: "va", title: "КМВА", user: "VA_Kyiv", cat: "Офіційне", initials: "ВА", city: "kyiv" },
+  { id: "od", title: "Київська ОВА", user: "kyivoda", cat: "Офіційне", initials: "ОД", city: "kyiv" },
+  { id: "oo", title: "Одеська ОВА", user: "odeskaODA", cat: "Офіційне", initials: "ОО", city: "odesa" },
+  { id: "of", title: "Одеса офіційно", user: "odessa_official", cat: "Офіційне", initials: "ОФ", city: "odesa" },
+  { id: "oa", title: "Тривога Одеса", user: "air_alert_odessa", cat: "Тривога", initials: "ТО", city: "odesa" },
+  { id: "om", title: "Одеса монітор", user: "odessa_monitor", cat: "Тривога", initials: "ОМ", city: "odesa" },
+  { id: "po", title: "ППО Одеса", user: "ppo_odessa", cat: "Тривога", initials: "ПО", city: "odesa" },
+  { id: "vo", title: "Вінницька ОВА", user: "vinnytskaODA", cat: "Офіційне", initials: "ВО", city: "vinnytsia" },
+  { id: "vd", title: "Вінниця ОДА", user: "vinnytsiaODA", cat: "Офіційне", initials: "ВД", city: "vinnytsia" },
+  { id: "vl", title: "Тривога Вінниця", user: "vinnytsia_alarm", cat: "Тривога", initials: "ТВ", city: "vinnytsia" },
 ];
 const CATS = ["Усі", "Тривога", "Офіційне"];
 const TABS = [
@@ -404,7 +423,10 @@ function parseVector(text) {
 }
 function vectorsFromFeed() {
   const now = Date.now(), out = [], seen = {};
+  const allow = {};
+  allSources().forEach(function (s) { allow[s.user.toLowerCase()] = 1; });
   messages.forEach(function (m) {
+    if (!m.s || !allow[String(m.s.user || "").toLowerCase()]) return;
     if (now - m.t > 50 * 60 * 1000) return;
     const v = parseVector(m.text);
     if (!v || seen[v.label]) return;
@@ -440,7 +462,7 @@ function syncMap() {
   const L = window.L;
   if (!L) return;
   if (!pulseMap) {
-    pulseMap = L.map("pulse-map").setView([50.45, 30.52], 8);
+    pulseMap = L.map("pulse-map").setView(getCity().map, 8);
     L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
       attribution: "&copy; OSM &copy; CARTO", subdomains: "abcd", maxZoom: 18
     }).addTo(pulseMap);
@@ -468,15 +490,59 @@ let serverAlert = alertStatus;
 let zones = [];
 let feedStats = { today: 0, last24h: 0, sourceCount: 9, scraperOk: false, todayAlerts: 0, durationLabel: "0 год" };
 const WATCH_AREAS = [
-  { id: 31, name: "м. Київ", short: "Київ" },
-  { id: 75, name: "Бучанський район", short: "Бучанський" },
-  { id: 74, name: "Вишгородський район", short: "Вишгородський" },
-  { id: 79, name: "Броварський район", short: "Броварський" },
-  { id: 78, name: "Бориспільський район", short: "Бориспільський" },
-  { id: 76, name: "Обухівський район", short: "Обухівський" },
-  { id: 77, name: "Фастівський район", short: "Фастівський" },
-  { id: 73, name: "Білоцерківський район", short: "Білоцерківський" },
+  { id: 31, name: "м. Київ", short: "Київ", city: "kyiv" },
+  { id: 75, name: "Бучанський район", short: "Бучанський", city: "kyiv" },
+  { id: 74, name: "Вишгородський район", short: "Вишгородський", city: "kyiv" },
+  { id: 79, name: "Броварський район", short: "Броварський", city: "kyiv" },
+  { id: 78, name: "Бориспільський район", short: "Бориспільський", city: "kyiv" },
+  { id: 76, name: "Обухівський район", short: "Обухівський", city: "kyiv" },
+  { id: 77, name: "Фастівський район", short: "Фастівський", city: "kyiv" },
+  { id: 73, name: "Білоцерківський район", short: "Білоцерківський", city: "kyiv" },
+  { id: 18, name: "Одеська область", short: "Одещина", city: "odesa" },
+  { id: 104, name: "Одеський район", short: "Одеський", city: "odesa" },
+  { id: 102, name: "Білгород-Дністровський", short: "Білгород-Дністровський", city: "odesa" },
+  { id: 100, name: "Березівський район", short: "Березівський", city: "odesa" },
+  { id: 101, name: "Ізмаїльський район", short: "Ізмаїльський", city: "odesa" },
+  { id: 105, name: "Болградський район", short: "Болградський", city: "odesa" },
+  { id: 103, name: "Роздільнянський район", short: "Роздільнянський", city: "odesa" },
+  { id: 99, name: "Подільський район", short: "Подільський", city: "odesa" },
+  { id: 4, name: "Вінницька область", short: "Вінниччина", city: "vinnytsia" },
+  { id: 36, name: "Вінницький район", short: "Вінницький", city: "vinnytsia" },
+  { id: 37, name: "Гайсинський район", short: "Гайсинський", city: "vinnytsia" },
+  { id: 35, name: "Жмеринський район", short: "Жмеринський", city: "vinnytsia" },
+  { id: 33, name: "Могилів-Подільський", short: "Могилів-Подільський", city: "vinnytsia" },
+  { id: 32, name: "Тульчинський район", short: "Тульчинський", city: "vinnytsia" },
+  { id: 34, name: "Хмільницький район", short: "Хмільницький", city: "vinnytsia" },
 ];
+function getCity() {
+  const id = localStorage.getItem("pulse-city") || "kyiv";
+  return CITIES.find(function (c) { return c.id === id; }) || CITIES[0];
+}
+function setCity(id) {
+  const next = CITIES.find(function (c) { return c.id === id; }) || CITIES[0];
+  localStorage.setItem("pulse-city", next.id);
+  const keep = readWatch().filter(function (wid) {
+    return WATCH_AREAS.some(function (a) { return a.id === wid && a.city === next.id; });
+  });
+  saveWatch(keep);
+  if (pulseMap) {
+    pulseMap.setView(next.map, 8);
+    lastVecKey = "";
+  }
+  alertStatus = applyLocalAlert(serverAlert, zones);
+  render();
+  loadFeed();
+}
+function cityAreas() {
+  const id = getCity().id;
+  return WATCH_AREAS.filter(function (a) { return a.city === id; });
+}
+function cityPicker() {
+  const id = getCity().id;
+  return '<div class="city-pick">' + CITIES.map(function (c) {
+    return '<button type="button" class="' + (c.id === id ? "on" : "") + '" data-city="' + c.id + '">' + c.name + "</button>";
+  }).join("") + "</div>";
+}
 function pulseMark() {
   return '<svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#191b20"/><path d="M3.5 17.5H9.1L12.15 7.4 16.7 25.6 20.1 17.5H28.5" fill="none" stroke="#7dcfb6" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 }
@@ -520,8 +586,36 @@ function saveExtras(list) {
     return { user: s.user, title: s.title || s.user };
   })));
 }
+function readHidden() {
+  try {
+    const raw = JSON.parse(localStorage.getItem("pulse-hidden") || "[]");
+    return Array.isArray(raw) ? raw.map(function (u) { return String(u).toLowerCase(); }) : [];
+  } catch (e) { return []; }
+}
+function hideSource(user) {
+  const u = String(user || "").toLowerCase();
+  if (!u) return;
+  const list = readHidden();
+  if (list.indexOf(u) < 0) list.push(u);
+  localStorage.setItem("pulse-hidden", JSON.stringify(list));
+  extraError = "";
+  render();
+  loadFeed();
+}
+function restoreHidden() {
+  localStorage.removeItem("pulse-hidden");
+  extraError = "";
+  render();
+  loadFeed();
+}
 function allSources() {
-  return SOURCES.concat(readExtras());
+  const city = getCity().id;
+  const hidden = readHidden();
+  const base = SOURCES.filter(function (s) {
+    if (hidden.indexOf(s.user.toLowerCase()) >= 0) return false;
+    return s.city === "all" || s.city === city;
+  });
+  return base.concat(readExtras());
 }
 function liveBadge() {
   return '<div class="live"><span class="live-dot"></span> Наживо</div>';
@@ -542,8 +636,10 @@ function statsGrid() {
 }
 function heroBlock() {
   const latest = messages[0];
+  const city = getCity();
   const lastLine = latest ? ("Останнє · " + ago(latest.t) + " · " + latest.s.title) : "Відкриті Telegram-канали зі списку джерел";
-  return '<div class="hero"><div class="hero-top"><div><div class="kicker">Огляд</div><div class="city-head">' + motherlandMark() + "<h3>Київ</h3></div><p class=\"muted\" style=\"margin:6px 0 0\">" + lastLine + "</p></div>" + liveBadge() + "</div>" + sirenBlock() + statsGrid() + airfieldBlock() + "</div>";
+  const mark = city.id === "kyiv" ? motherlandMark() : "";
+  return '<div class="hero"><div class="hero-top"><div><div class="kicker">Огляд</div><div class="city-head">' + mark + "<h3>" + city.name + "</h3></div><p class=\"muted\" style=\"margin:6px 0 0\">" + lastLine + "</p></div>" + liveBadge() + "</div>" + sirenBlock() + statsGrid() + airfieldBlock() + "</div>";
 }
 const AIRFIELD_SITES = [
   ["pakh", "Приморсько-Ахтарськ", /приморськ[о.\-\s]*ахтар|приморско[.\-\s]*ахтар/i],
@@ -717,11 +813,13 @@ function toggleWatch(id) {
 }
 function watchBox() {
   const selected = readWatch();
-  const rows = WATCH_AREAS.map(function (a) {
+  const rows = cityAreas().map(function (a) {
     const on = selected.indexOf(a.id) !== -1;
     return '<button class="toggle' + (on ? " on" : "") + '" data-watch="' + a.id + '"><span>' + a.name + '</span><span class="switch"><i></i></span></button>';
   }).join("");
-  return '<div class="card" id="watch-box" style="margin-top:16px"><p style="margin:0 0 8px"><b>Ваш район</b></p><p class="muted" style="margin:0 0 10px">Оберіть район, де ви є. Повітряна тривога — сирена лише для нього. Балістика і виліт МіГ-31 — сирена завжди, всім районам.</p>' +
+  return '<div class="card" id="watch-box" style="margin-top:16px"><p style="margin:0 0 8px"><b>Місто</b></p><p class="muted" style="margin:0 0 6px">Оберіть місто. Райони і канали підлаштуються.</p>' +
+    cityPicker() +
+    '<p style="margin:12px 0 8px"><b>Ваш район</b></p><p class="muted" style="margin:0 0 10px">Повітряна тривога — сирена лише для нього. Балістика і виліт МіГ-31 — сирена завжди.</p>' +
     rows +
     '<div class="watch-actions"><button type="button" id="watch-all">Усі райони</button><button type="button" id="watch-none">Скинути</button></div></div>';
 }
@@ -883,7 +981,10 @@ function card(m) {
 }
 function filtered() {
   const query = q.trim().toLowerCase();
+  const allow = {};
+  allSources().forEach(function (s) { allow[s.user.toLowerCase()] = 1; });
   return messages.filter(function (m) {
+    if (!m.s || !allow[String(m.s.user || "").toLowerCase()]) return false;
     if (cat !== "Усі" && m.s.cat !== cat) return false;
     if (!query) return true;
     return (m.text + " " + m.s.title + " " + m.s.user).toLowerCase().includes(query);
@@ -921,10 +1022,15 @@ function render() {
   } else if (tab === "map") {
     main = "";
   } else if (tab === "sources") {
-    main = '<form id="add-source" class="add-row"><input id="extra-q" placeholder="@канал або t.me/канал" autocomplete="off"/><button type="submit" ' + (extraBusy ? "disabled" : "") + ">" + (extraBusy ? "…" : "Додати") + "</button></form>" +
-      (extraError ? '<p class="muted" style="color:var(--danger);margin:0 2px 12px">' + extraError + "</p>" : '<p class="muted" style="margin:0 2px 12px">Вставте публічний Telegram-канал. Він з’явиться в стрічці і на карті. Сирену не вмикає.</p>') +
+    const hiddenN = readHidden().length;
+    main = cityPicker() +
+      '<form id="add-source" class="add-row"><input id="extra-q" placeholder="@канал або t.me/канал" autocomplete="off"/><button type="submit" ' + (extraBusy ? "disabled" : "") + ">" + (extraBusy ? "…" : "Додати") + "</button></form>" +
+      (extraError ? '<p class="muted" style="color:var(--danger);margin:0 2px 12px">' + extraError + "</p>" : '<p class="muted" style="margin:0 2px 12px">Штатні канали можна прибрати. Свій публічний канал — у стрічці і на карті. Сирену не вмикає.</p>') +
+      (hiddenN ? '<p class="muted" style="margin:0 2px 12px"><button class="rm" id="restore-src" style="margin:0;padding:0">Відновити штатні (' + hiddenN + ")</button></p>" : "") +
       allSources().map(function (s) {
-        const rm = s.custom ? '<button class="rm" data-rm="' + s.user + '">Прибрати</button>' : "";
+        const rm = s.custom
+          ? '<button class="rm" data-rm="' + s.user + '">Прибрати</button>'
+          : '<button class="rm" data-hide="' + s.user + '">Прибрати</button>';
         return '<div class="card"><div class="who"><div class="ava">' + s.initials + '</div><div><b>' + s.title + '</b><br><small class="muted">@' + s.user + (s.custom ? " · додано" : "") + "</small></div>" + rm + "</div></div>";
       }).join("");
   } else if (tab === "search") {
@@ -940,7 +1046,7 @@ function render() {
       '<p class="muted" style="margin:10px 2px 0">Сирена 10 секунд і пуш. Напис ТЕСТ. Справжню тривогу не оголошує.</p>' +
       '<div class="card" style="margin-top:16px"><p class="muted" style="margin:0">Оновлення з публічних Telegram-каналів кожні 15 с. Свайп зверху вниз — оновити зараз.</p></div>' +
       '<div class="card" style="margin-top:12px"><p style="margin:0 0 8px"><b>Приватність</b></p><p class="muted" style="margin:0">Ця програма не використовує геодані, не запитує місцезнаходження і не відстежує пристрій. Налаштування зберігаються лише на вашому телефоні.</p></div>' +
-      '<div class="card" style="margin-top:12px"><p style="margin:0 0 6px"><b>Про додаток</b></p><p class="muted" style="margin:0 0 8px">Пульс Києва — цивільне оповіщення по районах.</p><p style="margin:0;font-size:15px;font-weight:600">created by Poperechiuk_S</p></div>' +
+      '<div class="card" style="margin-top:12px"><p style="margin:0 0 6px"><b>Про додаток</b></p><p class="muted" style="margin:0 0 8px">' + getCity().brand + ' — цивільне оповіщення по районах.</p><p style="margin:0;font-size:15px;font-weight:600">created by Poperechiuk_S</p></div>' +
       '<div class="card" style="margin-top:12px"><p style="margin:0 0 8px"><b>На робочий екран</b></p>' +
       '<p class="muted" style="margin:0 0 10px">Тоді Пульс відкривається як звичайний додаток, без рядка браузера.</p>' +
       '<p style="margin:0 0 6px"><b>iPhone</b></p>' +
@@ -955,7 +1061,7 @@ function render() {
     return '<button class="' + (tab === item.id ? "on" : "") + '" data-tab="' + item.id + '">' + icon(item.icon) + "<span>" + item.label + "</span></button>";
   }).join("");
   document.getElementById("root").innerHTML =
-    '<div class="app' + (tab === "map" ? " map-on" : "") + '"><aside class="side"><div class="brand">' + pulseMark() + '<div><b>Пульс Києва</b><br><small class="muted">Цивільний моніторинг</small></div></div><nav class="nav">' + sideNav + '</nav></aside><div class="col"><header class="top"><div class="top-brand">' + pulseMark() + '<div><h2>Пульс</h2><p class="muted" style="margin:2px 0 0">' + titles.title + ' · ' + messages.length + ' повідомлень</p></div></div><div class="search"><input id="q" placeholder="Пошук у стрічці"/></div></header><div class="body"><section class="main">' + main + '</section><aside class="rail"><div class="kicker">Сьогодні</div><p style="font-size:36px;margin:4px 0">' + messages.length + "</p>" + CATS.map(function (c) { return '<button data-cat="' + c + '" class="' + (c === cat ? "on" : "") + '" style="margin:4px 4px 0 0;border:0;border-radius:999px;padding:6px 10px;background:' + (c === cat ? "var(--ink)" : "var(--raised)") + ';color:' + (c === cat ? "var(--canvas)" : "var(--quiet)") + '">' + c + "</button>"; }).join("") + allSources().map(function (s) { return '<p>' + s.title + '<br><small class="muted">@' + s.user + "</small></p>"; }).join("") + '</aside></div></div></div><nav class="dock" aria-label="Розділи">' + dock + "</nav>";
+    '<div class="app' + (tab === "map" ? " map-on" : "") + '"><aside class="side"><div class="brand">' + pulseMark() + '<div><b>' + getCity().brand + '</b><br><small class="muted">Цивільний моніторинг</small></div></div><nav class="nav">' + sideNav + '</nav></aside><div class="col"><header class="top"><div class="top-brand">' + pulseMark() + '<div><h2>Пульс</h2><p class="muted" style="margin:2px 0 0">' + titles.title + ' · ' + messages.length + ' повідомлень</p></div></div><div class="search"><input id="q" placeholder="Пошук у стрічці"/></div></header><div class="body"><section class="main">' + main + '</section><aside class="rail"><div class="kicker">Сьогодні</div><p style="font-size:36px;margin:4px 0">' + messages.length + "</p>" + CATS.map(function (c) { return '<button data-cat="' + c + '" class="' + (c === cat ? "on" : "") + '" style="margin:4px 4px 0 0;border:0;border-radius:999px;padding:6px 10px;background:' + (c === cat ? "var(--ink)" : "var(--raised)") + ';color:' + (c === cat ? "var(--canvas)" : "var(--quiet)") + '">' + c + "</button>"; }).join("") + allSources().map(function (s) { return '<p>' + s.title + '<br><small class="muted">@' + s.user + "</small></p>"; }).join("") + '</aside></div></div></div><nav class="dock" aria-label="Розділи">' + dock + "</nav>";
   document.querySelectorAll("[data-tab]").forEach(function (b) {
     b.onclick = function () { tab = b.getAttribute("data-tab"); render(); };
   });
@@ -1001,9 +1107,12 @@ function render() {
     b.onclick = function () { toggleWatch(b.getAttribute("data-watch")); };
   });
   const watchAll = document.getElementById("watch-all");
-  if (watchAll) watchAll.onclick = function () { setWatch(WATCH_AREAS.map(function (a) { return a.id; })); };
+  if (watchAll) watchAll.onclick = function () { setWatch(cityAreas().map(function (a) { return a.id; })); };
   const watchNone = document.getElementById("watch-none");
   if (watchNone) watchNone.onclick = function () { setWatch([]); };
+  document.querySelectorAll("[data-city]").forEach(function (b) {
+    b.onclick = function () { setCity(b.getAttribute("data-city")); };
+  });
   const extraInp = document.getElementById("extra-q");
   if (extraInp) {
     extraInp.value = extraDraft;
@@ -1019,6 +1128,11 @@ function render() {
   document.querySelectorAll("[data-rm]").forEach(function (b) {
     b.onclick = function () { removeExtraSource(b.getAttribute("data-rm")); };
   });
+  document.querySelectorAll("[data-hide]").forEach(function (b) {
+    b.onclick = function () { hideSource(b.getAttribute("data-hide")); };
+  });
+  const restoreSrc = document.getElementById("restore-src");
+  if (restoreSrc) restoreSrc.onclick = function () { restoreHidden(); };
   requestAnimationFrame(function () { pinDock(); syncMap(); });
 }
 let savedScroll = 0;
