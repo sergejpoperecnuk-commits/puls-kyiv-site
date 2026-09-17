@@ -10,6 +10,7 @@ const SOURCES = [
   { id: "od", title: "Київська ОВА", user: "kyivoda", cat: "Офіційне", initials: "ОД" },
 ];
 const BY_USER = Object.fromEntries(SOURCES.map((s) => [s.user.toLowerCase(), s]));
+const OFFICIAL_USERS = new Set(["va_kyiv", "kyivoda"]);
 const NBSP = "\u0026nbsp;";
 const AMP = "\u0026amp;";
 const DISTRICTS = [
@@ -26,7 +27,15 @@ const DISTRICTS = [
 ];
 
 function decodeEntities(v) {
-  return v.split(NBSP).join(" ").split(AMP).join("&").replace(/<[^>]+>/g, "").trim();
+  return v
+    .split(NBSP)
+    .join(" ")
+    .split(AMP)
+    .join("&")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCharCode(parseInt(n, 16)))
+    .replace(/<[^>]+>/g, "")
+    .trim();
 }
 
 function parseTelegramHtml(html) {
@@ -112,72 +121,106 @@ function wholeCity(text) {
   return /по всьому києву|по києву|м\.?\s*київ|столиц|весь київ|у києві/.test(t);
 }
 
+function isOfficialMsg(m) {
+  const user = (m.s && m.s.user ? m.s.user : "").toLowerCase();
+  return OFFICIAL_USERS.has(user) || (m.s && m.s.cat === "Офіційне");
+}
+
 function isRedText(text) {
-  const t = text.toLowerCase();
-  if (/відбій/.test(t) && /тривог/.test(t)) return false;
-  return /оголошен[оа].{0,12}тривог|повітряна тривога|тривога в києв|тривога по києв|сирена/.test(t) || /\bТРИВОГА\b/.test(text);
+  const t = String(text || "").toLowerCase();
+  if (/відбій/.test(t)) return false;
+  return /оголошен[оа].{0,20}тривог|повітряна тривога|тривога в києв|тривога по києв|сирена/.test(t) || /\bТРИВОГА\b/.test(String(text || ""));
 }
 
 function isClearText(text) {
-  const t = text.toLowerCase();
-  return /відбій/.test(t);
-}
-
-function isYellowText(text) {
-  const t = text.toLowerCase();
-  if (isClearText(text)) return false;
-  return /шахед|бпла|безпілот|ракет|балістик|кінжал|калібр|іскандер|курс на київ|напрямок києв|загроза|увага/.test(t);
+  return /відбій/.test(String(text || "").toLowerCase());
 }
 
 function formatSince(ts) {
   if (!ts) return "";
-  const d = new Date(ts);
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  return hh + ":" + mm;
+  const d = ts instanceof Date ? ts : new Date(ts);
+  if (Number.isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("uk-UA", {
+    timeZone: "Europe/Kyiv",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(d);
 }
 
-function buildAlert(messages, city, oblast) {
-  const recent = messages.filter((m) => Date.now() - m.t < 40 * 60 * 1000);
+function stamp(wrap) {
+  if (!wrap) return 0;
+  const raw = (wrap.state && wrap.state.changed) || wrap.last_update || wrap.changed || 0;
+  const n = new Date(raw).getTime();
+  return Number.isFinite(n) ? n : 0;
+}
+
+function isFreshOn(wrap) {
+  if (!wrap || !wrap.state || !wrap.state.alert) return false;
+  const ts = Date.parse(wrap.last_update || wrap.state.changed || "");
+  if (!Number.isFinite(ts)) return true;
+  return Date.now() - ts < 36 * 60 * 60 * 1000;
+}
+
+function ajaxOnKyiv(ajax) {
+  return Boolean(ajax && Array.isArray(ajax.alarms) && ajax.alarms.length > 0);
+}
+
+function buildAlert(messages, cityWrap, oblastWrap, ajax) {
+  const cityOn = isFreshOn(cityWrap);
+  const oblastOn = isFreshOn(oblastWrap);
+  const ajaxOn = ajaxOnKyiv(ajax);
+  const mapOk = Boolean(cityWrap && cityWrap.state);
+  const ajaxOk = Boolean(ajax && Array.isArray(ajax.alarms));
+
+  const official = (messages || []).filter(isOfficialMsg);
   let districts = [];
   let lastRed = 0;
   let lastClear = 0;
-  let lastYellow = 0;
-  let yellowHint = "";
-  for (const m of recent) {
+  for (const m of official) {
+    if (Date.now() - m.t > 6 * 60 * 60 * 1000) continue;
     const ds = findDistricts(m.text);
     if (isRedText(m.text)) {
       if (m.t > lastRed) lastRed = m.t;
       districts = districts.concat(ds);
     } else if (isClearText(m.text)) {
       if (m.t > lastClear) lastClear = m.t;
-    } else if (isYellowText(m.text)) {
-      if (m.t > lastYellow) {
-        lastYellow = m.t;
-        yellowHint = ds[0] || (wholeCity(m.text) ? "Київ" : "напрямок Києва");
-      }
-      districts = districts.concat(ds);
     }
   }
   districts = districts.filter((v, i, a) => a.indexOf(v) === i);
 
-  const cityOn = Boolean(city && city.alert);
-  const oblastOn = Boolean(oblast && oblast.alert);
-
-  if (cityOn || oblastOn) {
+  const officialOn = cityOn || oblastOn || ajaxOn;
+  if (officialOn) {
     let where = "Київ";
-    if (cityOn && oblastOn) where = "Київ і область";
-    else if (oblastOn && !cityOn) where = "Київська область";
-    else if (districts.length && !wholeCity(recent.map((m) => m.text).join(" "))) {
+    if ((oblastOn || ajaxOn) && !cityOn) where = "Київська область";
+    if (cityOn && (oblastOn || ajaxOn)) where = "Київ і область";
+    if (districts.length && !wholeCity(official.map((m) => m.text).join(" "))) {
       where = districts.slice(0, 3).join(", ");
-    } else where = "Київ";
-    const since = cityOn ? city.changed : oblast.changed;
+    }
+    const since = cityOn
+      ? stamp(cityWrap)
+      : oblastOn
+        ? stamp(oblastWrap)
+        : lastRed || Date.now();
     return {
       level: "red",
       title: "Тривога",
       where,
-      detail: "сирена · з " + formatSince(since),
-      since: since ? new Date(since).getTime() : Date.now(),
+      detail: "офіційно · сирена · з " + formatSince(since),
+      since: since || Date.now(),
+      source: "official",
+    };
+  }
+
+  if (mapOk || ajaxOk) {
+    const since = stamp(cityWrap) || lastClear || Date.now();
+    return {
+      level: "clear",
+      title: "Немає тривоги",
+      where: "Київ",
+      detail: "офіційно · відбій · " + formatSince(since),
+      since,
+      source: "official",
     };
   }
 
@@ -187,18 +230,20 @@ function buildAlert(messages, city, oblast) {
       level: "red",
       title: "Тривога",
       where,
-      detail: "зі стрічки · з " + formatSince(lastRed),
+      detail: "офіційно · КМВА / ОВА · з " + formatSince(lastRed),
       since: lastRed,
+      source: "official-tg",
     };
   }
 
-  if (lastYellow > lastClear) {
+  if (lastClear) {
     return {
-      level: "yellow",
-      title: "Загроза",
-      where: yellowHint || (districts[0] || "напрямок Києва"),
-      detail: "без сирени · стежте за укриттям",
-      since: lastYellow,
+      level: "clear",
+      title: "Немає тривоги",
+      where: "Київ",
+      detail: "офіційно · КМВА / ОВА · відбій · " + formatSince(lastClear),
+      since: lastClear,
+      source: "official-tg",
     };
   }
 
@@ -206,18 +251,20 @@ function buildAlert(messages, city, oblast) {
     level: "clear",
     title: "Немає тривоги",
     where: "Київ",
-    detail: lastClear ? "відбій · " + formatSince(lastClear) : "сирени немає",
-    since: lastClear || (city && city.changed ? new Date(city.changed).getTime() : Date.now()),
+    detail: "офіційні джерела · сирени немає",
+    since: Date.now(),
+    source: "official",
   };
 }
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Cache-Control", "s-maxage=20, stale-while-revalidate=40");
-  const [lists, cityWrap, oblastWrap] = await Promise.all([
+  const [lists, cityWrap, oblastWrap, ajax] = await Promise.all([
     Promise.all(SOURCES.map((s) => scrape(s.user))),
     fetchJson("https://alerts.com.ua/api/states/25", 5000),
     fetchJson("https://alerts.com.ua/api/states/9", 5000),
+    fetchJson("https://air-save.ops.ajax.systems/api/mobile/status/regions/v2?regions=14,31", 5000),
   ]);
   const seen = new Set();
   const all = lists
@@ -238,6 +285,6 @@ export default async function handler(req, res) {
     scraperOk: all.length > 0,
   };
   const messages = all.slice(0, 60);
-  const alert = buildAlert(messages, cityWrap && cityWrap.state, oblastWrap && oblastWrap.state);
+  const alert = buildAlert(messages, cityWrap, oblastWrap, ajax);
   res.status(200).json({ ok: true, at: Date.now(), count: messages.length, stats, alert, messages });
 }
