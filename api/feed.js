@@ -218,9 +218,35 @@ function ajaxOnKyiv(ajax) {
   return Boolean(ajax && Array.isArray(ajax.alarms) && ajax.alarms.length > 0);
 }
 
+function ajaxLevel(ajax, ids) {
+  if (!ajax || !Array.isArray(ajax.alarms)) return "";
+  const want = new Set(ids);
+  let yellow = false;
+  for (const alarm of ajax.alarms) {
+    if (!want.has(Number(alarm.regionId))) continue;
+    const level = String(alarm.alertLevel || "RED").toUpperCase();
+    if (level === "YELLOW") yellow = true;
+    else return "red";
+  }
+  return yellow ? "yellow" : "";
+}
+
 function mentionsBucha(text) {
   const t = String(text || "").toLowerCase();
   return /бучанськ|\bбуча\b|\bбучі\b|ірпін|гостом|бородян|макарів|ворзел|коцюбинськ|немшаїв|пісківк/.test(t);
+}
+
+function buchaFromOfficial(text) {
+  const t = String(text || "").toLowerCase().replace(/\s+/g, " ");
+  const stillOn = /досі триває[\s\S]*бучанськ/.test(t);
+  const head = t.split(/досі триває|зверніть увагу/)[0];
+  const about = /бучанськ/.test(head);
+  if (about && /відбій/.test(head)) return "clear";
+  if (stillOn) return "red";
+  if (about && /(повітряна тривога|оголошен|жовтий|червон|сирена)/.test(head) && !/відбій/.test(head)) {
+    return "red";
+  }
+  return "";
 }
 
 function isKyivRelevant(text) {
@@ -270,8 +296,9 @@ function urgentAlert(urgent, buchaOn) {
 }
 
 function buildAlert(messages, cityWrap, oblastWrap, ajaxOblast, ajaxCity) {
-  const cityOn = isFreshOn(cityWrap) || ajaxOnKyiv(ajaxCity);
-  const oblastOn = isFreshOn(oblastWrap) || ajaxOnKyiv(ajaxOblast);
+  const cityOn = isFreshOn(cityWrap) || ajaxLevel(ajaxCity, [31]) === "red";
+  const buchaAjax = ajaxLevel(ajaxOblast, [75, 14]);
+  const oblastOn = isFreshOn(oblastWrap);
   const mapOk = Boolean(cityWrap && cityWrap.state);
   const ajaxOk = Boolean(
     (ajaxOblast && Array.isArray(ajaxOblast.alarms)) ||
@@ -285,40 +312,60 @@ function buildAlert(messages, cityWrap, oblastWrap, ajaxOblast, ajaxCity) {
   let lastBuchaClear = 0;
   for (const m of official) {
     if (Date.now() - m.t > 6 * 60 * 60 * 1000) continue;
-    const bucha = mentionsBucha(m.text);
+    const bucha = buchaFromOfficial(m.text);
+    if (bucha === "red" && m.t > lastBuchaRed) lastBuchaRed = m.t;
+    if (bucha === "clear" && m.t > lastBuchaClear) lastBuchaClear = m.t;
     if (isRedText(m.text)) {
       if (m.t > lastRed) lastRed = m.t;
-      if (bucha && m.t > lastBuchaRed) lastBuchaRed = m.t;
     } else if (isClearText(m.text)) {
       if (m.t > lastClear) lastClear = m.t;
-      if (bucha && m.t > lastBuchaClear) lastBuchaClear = m.t;
     }
   }
 
-  const buchaOn = oblastOn || lastBuchaRed > lastBuchaClear;
+  const buchaOn = oblastOn || buchaAjax === "red" || lastBuchaRed > lastBuchaClear;
   const urgent = findUrgent(messages);
   if (urgent) return urgentAlert(urgent, buchaOn);
 
-  const anyOn = cityOn || buchaOn;
-
-  if (anyOn) {
-    let where = "Київ";
-    if (buchaOn && cityOn) where = "Київ і Бучанський район";
-    else if (buchaOn) where = "Бучанський район";
-    const since = buchaOn
-      ? stamp(oblastWrap) || lastBuchaRed || Date.now()
-      : stamp(cityWrap) || lastRed || Date.now();
+  if (buchaOn) {
+    const since = stamp(oblastWrap) || lastBuchaRed || Date.now();
     return {
       level: "red",
       title: "Тривога",
-      where,
-      detail: buchaOn
-        ? "офіційно · Бучанський район · з " + formatSince(since)
-        : "офіційно · Київ · без сирени в Бучі · з " + formatSince(since),
+      where: cityOn ? "Київ і Бучанський район" : "Бучанський район",
+      detail: "офіційно · Бучанський район · з " + formatSince(since),
       since: since || Date.now(),
       source: "official",
-      bucha: buchaOn,
-      siren: buchaOn,
+      bucha: true,
+      siren: true,
+      kind: "air",
+    };
+  }
+
+  if (buchaAjax === "yellow") {
+    return {
+      level: "yellow",
+      title: "Загроза",
+      where: "Бучанський район",
+      detail: "офіційно · жовтий рівень · Бучанський район",
+      since: Date.now(),
+      source: "official",
+      bucha: false,
+      siren: false,
+      kind: "air",
+    };
+  }
+
+  if (cityOn) {
+    const since = stamp(cityWrap) || lastRed || Date.now();
+    return {
+      level: "red",
+      title: "Тривога",
+      where: "Київ",
+      detail: "офіційно · Київ · без сирени в Бучі · з " + formatSince(since),
+      since: since || Date.now(),
+      source: "official",
+      bucha: false,
+      siren: false,
       kind: "air",
     };
   }
@@ -400,7 +447,7 @@ export default async function handler(req, res) {
     Promise.all(sources.map(scrape)),
     fetchJson("https://alerts.com.ua/api/states/25", 5000),
     fetchJson("https://alerts.com.ua/api/states/9", 5000),
-    fetchJson("https://air-save.ops.ajax.systems/api/mobile/status/regions/v2?regions=14", 5000),
+    fetchJson("https://air-save.ops.ajax.systems/api/mobile/status/regions/v2?regions=14,75", 5000),
     fetchJson("https://air-save.ops.ajax.systems/api/mobile/status/regions/v2?regions=31", 5000),
     fetchJson("https://my-kiev.com/alerts/api/history/31", 5000),
   ]);
