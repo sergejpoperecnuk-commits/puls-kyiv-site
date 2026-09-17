@@ -231,15 +231,28 @@ function ajaxLevel(ajax, ids) {
   return yellow ? "yellow" : "";
 }
 
+const WATCH_AREAS = [
+  { id: 31, name: "м. Київ", short: "Київ" },
+  { id: 75, name: "Бучанський район", short: "Бучанський" },
+  { id: 74, name: "Вишгородський район", short: "Вишгородський" },
+  { id: 79, name: "Броварський район", short: "Броварський" },
+  { id: 78, name: "Бориспільський район", short: "Бориспільський" },
+  { id: 76, name: "Обухівський район", short: "Обухівський" },
+  { id: 77, name: "Фастівський район", short: "Фастівський" },
+  { id: 73, name: "Білоцерківський район", short: "Білоцерківський" },
+];
+
+function strongerLevel(a, b) {
+  if (a === "red" || b === "red") return "red";
+  if (a === "yellow" || b === "yellow") return "yellow";
+  return "";
+}
+
 function parseAin(data) {
+  const byId = {};
+  for (const area of WATCH_AREAS) byId[area.id] = "";
   const alerts = data && Array.isArray(data.alerts) ? data.alerts : null;
-  const out = {
-    ok: Boolean(alerts),
-    buchaRed: false,
-    buchaYellow: false,
-    cityRed: false,
-    cityYellow: false,
-  };
+  const out = { ok: Boolean(alerts), byId: byId, oblastWide: "" };
   if (!alerts) return out;
   for (const a of alerts) {
     if (a.f) continue;
@@ -247,19 +260,42 @@ function parseAin(data) {
     if (at === 1 || at === 2 || at === 90) continue;
     const uid = Number(a.luid);
     const raion = Number(a.lruid);
-    const yellow = Number(a.al) === 1;
-    const bucha = uid === 75 || uid === 14 || raion === 75;
-    const city = uid === 31;
-    if (bucha) {
-      if (yellow) out.buchaYellow = true;
-      else out.buchaRed = true;
+    const level = Number(a.al) === 1 ? "yellow" : "red";
+    if (uid === 14) out.oblastWide = strongerLevel(out.oblastWide, level);
+    if (Object.prototype.hasOwnProperty.call(byId, uid)) {
+      byId[uid] = strongerLevel(byId[uid], level);
     }
-    if (city) {
-      if (yellow) out.cityYellow = true;
-      else out.cityRed = true;
+    if (Object.prototype.hasOwnProperty.call(byId, raion)) {
+      byId[raion] = strongerLevel(byId[raion], level);
+    }
+  }
+  if (out.oblastWide) {
+    for (const area of WATCH_AREAS) {
+      if (area.id === 31) continue;
+      byId[area.id] = strongerLevel(byId[area.id], out.oblastWide);
     }
   }
   return out;
+}
+
+function buildZones(ainData, ajaxAll, cityWrap, oblastWrap) {
+  const ain = parseAin(ainData);
+  return WATCH_AREAS.map(function (area) {
+    let level = "";
+    if (ain.ok) {
+      level = ain.byId[area.id] || "";
+    } else if (area.id === 31) {
+      level = isFreshOn(cityWrap) ? "red" : ajaxLevel(ajaxAll, [31]);
+    } else {
+      level = isFreshOn(oblastWrap) ? "red" : ajaxLevel(ajaxAll, [area.id, 14]);
+    }
+    return {
+      id: area.id,
+      name: area.name,
+      short: area.short,
+      level: level || "clear",
+    };
+  });
 }
 
 function mentionsBucha(text) {
@@ -326,15 +362,20 @@ function urgentAlert(urgent, buchaOn) {
   };
 }
 
-function buildAlert(messages, cityWrap, oblastWrap, ajaxOblast, ajaxCity, ainData) {
+function zoneOf(zones, id) {
+  return zones.find(function (z) { return z.id === id; }) || { id: id, level: "clear" };
+}
+
+function buildAlert(messages, cityWrap, oblastWrap, ajaxAll, ainData) {
   const ain = parseAin(ainData);
-  const buchaAjax = ajaxLevel(ajaxOblast, [75, 14]);
-  const cityAjax = ajaxLevel(ajaxCity, [31]);
+  const zones = buildZones(ainData, ajaxAll, cityWrap, oblastWrap);
   const mapOk = Boolean(cityWrap && cityWrap.state);
-  const ajaxOk = Boolean(
-    (ajaxOblast && Array.isArray(ajaxOblast.alarms)) ||
-      (ajaxCity && Array.isArray(ajaxCity.alarms)),
-  );
+  const ajaxOk = Boolean(ajaxAll && Array.isArray(ajaxAll.alarms));
+  const bucha = zoneOf(zones, 75);
+  const city = zoneOf(zones, 31);
+  const buchaOn = bucha.level === "red";
+  const buchaYellow = bucha.level === "yellow";
+  const cityOn = city.level === "red";
 
   const official = (messages || []).filter(isOfficialMsg);
   let lastRed = 0;
@@ -343,9 +384,9 @@ function buildAlert(messages, cityWrap, oblastWrap, ajaxOblast, ajaxCity, ainDat
   let lastBuchaClear = 0;
   for (const m of official) {
     if (Date.now() - m.t > 6 * 60 * 60 * 1000) continue;
-    const bucha = buchaFromOfficial(m.text);
-    if (bucha === "red" && m.t > lastBuchaRed) lastBuchaRed = m.t;
-    if (bucha === "clear" && m.t > lastBuchaClear) lastBuchaClear = m.t;
+    const st = buchaFromOfficial(m.text);
+    if (st === "red" && m.t > lastBuchaRed) lastBuchaRed = m.t;
+    if (st === "clear" && m.t > lastBuchaClear) lastBuchaClear = m.t;
     if (isRedText(m.text)) {
       if (m.t > lastRed) lastRed = m.t;
     } else if (isClearText(m.text)) {
@@ -353,19 +394,18 @@ function buildAlert(messages, cityWrap, oblastWrap, ajaxOblast, ajaxCity, ainDat
     }
   }
 
-  const buchaOn = ain.ok
-    ? ain.buchaRed
-    : isFreshOn(oblastWrap) || buchaAjax === "red" || lastBuchaRed > lastBuchaClear;
-  const buchaYellow = ain.ok ? ain.buchaYellow : buchaAjax === "yellow";
-  const cityOn = ain.ok
-    ? ain.cityRed
-    : isFreshOn(cityWrap) || cityAjax === "red";
+  if (!ain.ok && lastBuchaRed > lastBuchaClear) bucha.level = "red";
+
+  const packed = function (alert) {
+    return { alert: alert, zones: zones };
+  };
+
   const urgent = findUrgent(messages);
-  if (urgent) return urgentAlert(urgent, buchaOn);
+  if (urgent) return packed(urgentAlert(urgent, buchaOn));
 
   if (buchaOn) {
     const since = lastBuchaRed || stamp(oblastWrap) || Date.now();
-    return {
+    return packed({
       level: "red",
       title: "Тривога",
       where: cityOn ? "Київ і Бучанський район" : "Бучанський район",
@@ -375,11 +415,11 @@ function buildAlert(messages, cityWrap, oblastWrap, ajaxOblast, ajaxCity, ainDat
       bucha: true,
       siren: true,
       kind: "air",
-    };
+    });
   }
 
   if (buchaYellow) {
-    return {
+    return packed({
       level: "yellow",
       title: "Загроза",
       where: "Бучанський район",
@@ -389,50 +429,50 @@ function buildAlert(messages, cityWrap, oblastWrap, ajaxOblast, ajaxCity, ainDat
       bucha: false,
       siren: false,
       kind: "air",
-    };
+    });
   }
 
   if (cityOn) {
     const since = stamp(cityWrap) || lastRed || Date.now();
-    return {
+    return packed({
       level: "red",
       title: "Тривога",
       where: "Київ",
-      detail: "alerts.in.ua · Київ · без сирени в Бучі · з " + formatSince(since),
+      detail: "alerts.in.ua · Київ · з " + formatSince(since),
       since: since || Date.now(),
       source: "official",
       bucha: false,
       siren: false,
       kind: "air",
-    };
+    });
   }
 
   if (ain.ok || mapOk || ajaxOk || lastBuchaClear || lastClear) {
     const since = lastBuchaClear || stamp(cityWrap) || Date.now();
-    return {
+    return packed({
       level: "clear",
       title: "Немає тривоги",
       where: "Бучанський район",
-      detail: "alerts.in.ua · Бучанський район · відбій · " + formatSince(since),
-      since,
+      detail: "alerts.in.ua · відбій · " + formatSince(since),
+      since: since,
       source: "official",
       bucha: false,
       siren: false,
       kind: "clear",
-    };
+    });
   }
 
-  return {
+  return packed({
     level: "clear",
     title: "Немає тривоги",
     where: "Бучанський район",
-    detail: "alerts.in.ua · сирени в Бучанському районі немає",
+    detail: "alerts.in.ua · сирени немає",
     since: Date.now(),
     source: "official",
     bucha: false,
     siren: false,
     kind: "clear",
-  };
+  });
 }
 
 function kyivDayKey(ts) {
@@ -480,12 +520,11 @@ export default async function handler(req, res) {
   res.setHeader("Cache-Control", "s-maxage=10, stale-while-revalidate=20");
   const extras = parseExtras(req);
   const sources = SOURCES.concat(extras);
-  const [lists, cityWrap, oblastWrap, ajaxOblast, ajaxCity, kyivHist, ainData] = await Promise.all([
+  const [lists, cityWrap, oblastWrap, ajaxAll, kyivHist, ainData] = await Promise.all([
     Promise.all(sources.map(scrape)),
     fetchJson("https://alerts.com.ua/api/states/25", 5000),
     fetchJson("https://alerts.com.ua/api/states/9", 5000),
-    fetchJson("https://air-save.ops.ajax.systems/api/mobile/status/regions/v2?regions=14,75", 5000),
-    fetchJson("https://air-save.ops.ajax.systems/api/mobile/status/regions/v2?regions=31", 5000),
+    fetchJson("https://air-save.ops.ajax.systems/api/mobile/status/regions/v2?regions=14,31,73,74,75,76,77,78,79", 5000),
     fetchJson("https://my-kiev.com/alerts/api/history/31", 5000),
     fetchJson("https://api.alerts.in.ua/v3/alerts/active.json", 5000),
   ]);
@@ -498,7 +537,7 @@ export default async function handler(req, res) {
       return true;
     })
     .sort((a, b) => b.t - a.t);
-  const cityOn = isFreshOn(cityWrap) || ajaxOnKyiv(ajaxCity);
+  const cityOn = isFreshOn(cityWrap) || ajaxLevel(ajaxAll, [31]) === "red";
   const kyivStats = computeKyivAlertStats(kyivHist, cityOn);
   const stats = {
     today: kyivStats.todayAlerts,
@@ -523,6 +562,6 @@ export default async function handler(req, res) {
     const rest = all.filter((m) => !seenPin.has(m.id));
     messages.splice(0, messages.length, ...pinned.concat(rest).slice(0, 80));
   }
-  const alert = buildAlert(messages, cityWrap, oblastWrap, ajaxOblast, ajaxCity, ainData);
-  res.status(200).json({ ok: true, at: Date.now(), count: messages.length, stats, alert, messages });
+  const packed = buildAlert(messages, cityWrap, oblastWrap, ajaxAll, ainData);
+  res.status(200).json({ ok: true, at: Date.now(), count: messages.length, stats, alert: packed.alert, zones: packed.zones, messages });
 }
