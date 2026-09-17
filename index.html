@@ -12,7 +12,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png"/>
 <link rel="apple-touch-icon" href="/apple-touch-icon.png"/>
 <title>Пульс Києва</title>
-<!-- pulse-chrome-v9-kyiv-alert-stats-20260917 -->
+<!-- pulse-chrome-v10-test-boost-20260917 -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap"/>
 <style>
 :root {
@@ -106,6 +106,11 @@ button:not(:disabled) { cursor: pointer; }
 .switch i { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #c7c8cc; transition: .2s; }
 .toggle.on .switch { background: var(--signal); }
 .toggle.on .switch i { left: 19px; background: #09110e; }
+.test-btn {
+  margin-top: 8px; width: 100%; border: 0; border-radius: 12px; padding: 14px 16px;
+  background: var(--danger); color: #fff; font-weight: 700; font-size: 15px;
+}
+.test-btn:disabled { opacity: .55; }
 .siren {
   display: inline-flex; align-items: center; gap: 8px;
   margin-top: 12px; border-radius: 999px; padding: 8px 12px;
@@ -365,6 +370,9 @@ function playOfficialSiren() {
 }
 function notifyUser(title, body, tag) {
   if (!pushOn()) return;
+  showPush(title, body, tag);
+}
+function showPush(title, body, tag) {
   const opts = {
     body: body || "",
     tag: tag || "pulse-alert",
@@ -380,6 +388,27 @@ function notifyUser(title, body, tag) {
     navigator.serviceWorker.ready.then(function (reg) { reg.showNotification(title, opts); }).catch(function () { try { new Notification(title, opts); } catch (e) {} });
   } else {
     try { new Notification(title, opts); } catch (e) {}
+  }
+}
+let testBoostUntil = 0;
+let testBusy = false;
+async function runTestBoost() {
+  if (testBusy) return;
+  testBusy = true;
+  unlockAudio();
+  playOfficialSiren();
+  testBoostUntil = Date.now() + 8000;
+  render();
+  setTimeout(function () {
+    testBusy = false;
+    if (Date.now() >= testBoostUntil) render();
+  }, 8200);
+  if (typeof Notification === "undefined") return;
+  let perm = Notification.permission;
+  if (perm === "default") perm = await Notification.requestPermission();
+  if (perm === "granted") {
+    localStorage.setItem("pulse-push", "1");
+    showPush("ТЕСТ · Пульс Києва", "Це перевірка. Справжньої тривоги немає.", "pulse-test");
   }
 }
 async function setPush(on) {
@@ -401,7 +430,10 @@ async function setPush(on) {
   render();
 }
 function sirenBlock() {
-  const a = alertStatus || {};
+  const testing = Date.now() < testBoostUntil;
+  const a = testing
+    ? { level: "red", title: "ТЕСТ", where: "перевірка сигналу", detail: "Це не справжня тривога. Сирена 4 секунди." }
+    : (alertStatus || {});
   const level = a.level === "red" || a.level === "yellow" ? a.level : "clear";
   return '<div class="siren ' + level + '"><span class="pulse"></span><span>' + (a.title || "Статус") + '</span><span class="where">· ' + (a.where || "Київ") + '</span></div><p class="siren-detail">' + (a.detail || "") + "</p>";
 }
@@ -441,6 +473,8 @@ function render() {
       '<p class="muted" style="margin:10px 2px 16px">' + (soundOn() ? "Увімкнено: сирена для Бучанського району." : "Вимкнено.") + "</p>" +
       '<button class="toggle' + (pushOn() ? " on" : "") + '" id="push-toggle"><span>Пуш-повідомлення</span><span class="switch"><i></i></span></button>' +
       '<p class="muted" id="push-status" style="margin:10px 2px 0">' + pushStatusText() + "</p>" +
+      '<button class="test-btn" id="test-boost"' + (testBusy ? " disabled" : "") + ">" + (testBusy ? "Тест іде…" : "Тестова тривога") + "</button>" +
+      '<p class="muted" style="margin:10px 2px 0">Сирена 4 секунди і пуш. Напис ТЕСТ. Справжню тривогу не оголошує.</p>' +
       '<div class="card" style="margin-top:16px"><p class="muted" style="margin:0">Оновлення з публічних Telegram-каналів кожні 15 с. Свайп зверху вниз — оновити зараз.</p></div>' +
       '<div class="card" style="margin-top:12px"><p style="margin:0 0 8px"><b>Приватність</b></p><p class="muted" style="margin:0">Ця програма не використовує геодані, не запитує місцезнаходження і не відстежує пристрій. Налаштування зберігаються лише на вашому телефоні.</p></div>';
   }
@@ -479,6 +513,10 @@ function render() {
   const soundHome = document.getElementById("sound-home");
   if (soundHome) {
     soundHome.onclick = function () { setSound(true); };
+  }
+  const testBtn = document.getElementById("test-boost");
+  if (testBtn) {
+    testBtn.onclick = function () { runTestBoost(); };
   }
   const extraInp = document.getElementById("extra-q");
   if (extraInp) {
@@ -611,7 +649,7 @@ async function loadFeed() {
         if (sirenOn && lastAlertLevel !== sirenKey) {
           if (soundOn()) playOfficialSiren();
           notifyUser(alertStatus.title + " · " + alertStatus.where, alertStatus.detail, "pulse-alert");
-        } else if (!sirenOn) {
+        } else if (!sirenOn && Date.now() >= testBoostUntil) {
           stopSiren();
         }
       }
