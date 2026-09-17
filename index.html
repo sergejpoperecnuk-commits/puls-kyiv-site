@@ -12,7 +12,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png"/>
 <link rel="apple-touch-icon" href="/apple-touch-icon.png"/>
 <title>Пульс Києва</title>
-<!-- pulse-chrome-v3-20260917 -->
+<!-- pulse-chrome-v4-official-siren-20260917 -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap"/>
 <style>
 :root {
@@ -244,15 +244,70 @@ function pushOn() {
 function pushStatusText() {
   if (typeof Notification === "undefined") return "Цей браузер не вміє пуш.";
   if (Notification.permission === "denied") return "Браузер заборонив сповіщення. Дозвольте їх у налаштуваннях сайту.";
-  if (pushOn()) return "Увімкнено: тривога і нові пости.";
+  if (pushOn()) return "Увімкнено: лише офіційна сирена.";
   return "Вимкнено.";
 }
 let seenIds = new Set();
 let lastAlertLevel = "";
 let bootDone = false;
+let audioCtx = null;
+let sirenOsc = null;
+function unlockAudio() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+  } catch (e) {}
+}
+function stopSiren() {
+  if (!sirenOsc || !audioCtx) return;
+  try {
+    const now = audioCtx.currentTime;
+    sirenOsc.gain.gain.cancelScheduledValues(now);
+    sirenOsc.gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
+    sirenOsc.osc.stop(now + 0.1);
+  } catch (e) {}
+  sirenOsc = null;
+}
+function playOfficialSiren() {
+  unlockAudio();
+  if (!audioCtx) return;
+  stopSiren();
+  try {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "sawtooth";
+    const start = audioCtx.currentTime;
+    osc.frequency.setValueAtTime(560, start);
+    for (let i = 0; i < 8; i++) {
+      const t = start + i;
+      osc.frequency.setValueAtTime(560, t);
+      osc.frequency.linearRampToValueAtTime(880, t + 0.48);
+      osc.frequency.linearRampToValueAtTime(560, t + 0.96);
+    }
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(0.11, start + 0.06);
+    gain.gain.setValueAtTime(0.11, start + 7.65);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + 8);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(start);
+    osc.stop(start + 8.05);
+    sirenOsc = { osc: osc, gain: gain };
+  } catch (e) {}
+  if (navigator.vibrate) navigator.vibrate([220, 80, 220, 80, 420, 120, 420]);
+}
 function notifyUser(title, body, tag) {
   if (!pushOn()) return;
-  const opts = { body: body || "", tag: tag || "pulse", lang: "uk", icon: "/icon-192.png", badge: "/icon-192.png", vibrate: [140, 70, 140] };
+  const opts = {
+    body: body || "",
+    tag: tag || "pulse-alert",
+    lang: "uk",
+    icon: "/icon-192.png",
+    badge: "/icon-192.png",
+    vibrate: [220, 80, 220, 80, 420],
+    requireInteraction: true,
+    renotify: true,
+    silent: false,
+  };
   if (navigator.serviceWorker) {
     navigator.serviceWorker.ready.then(function (reg) { reg.showNotification(title, opts); }).catch(function () { try { new Notification(title, opts); } catch (e) {} });
   } else {
@@ -269,8 +324,9 @@ async function setPush(on) {
   const perm = await Notification.requestPermission();
   if (perm === "granted") {
     localStorage.setItem("pulse-push", "1");
+    unlockAudio();
     try { await navigator.serviceWorker.register("/sw.js"); } catch (e) {}
-    notifyUser("Пульс Києва", "Сповіщення увімкнено", "pulse-on");
+    notifyUser("Пульс Києва", "Офіційна тривога: звук і пуш увімкнено", "pulse-on");
   } else {
     localStorage.setItem("pulse-push", "0");
   }
@@ -299,7 +355,7 @@ function render() {
   savedScroll = prevMain ? prevMain.scrollTop : savedScroll;
   let main = "";
   if (tab === "home") {
-    main = heroBlock() + (pushOn() ? "" : '<button class="toggle" id="push-home" style="margin-bottom:14px"><span>Увімкнути пуш про тривогу</span><span class="switch"><i></i></span></button>') + list.slice(0, 8).map(card).join("");
+    main = heroBlock() + (pushOn() ? "" : '<button class="toggle" id="push-home" style="margin-bottom:14px"><span>Увімкнути звук офіційної тривоги</span><span class="switch"><i></i></span></button>') + list.slice(0, 8).map(card).join("");
   } else if (tab === "feed") {
     main = list.map(card).join("") || '<p class="muted">Чекаємо пости…</p>';
   } else if (tab === "sources") {
@@ -309,8 +365,8 @@ function render() {
   } else if (tab === "search") {
     main = list.length ? list.map(card).join("") : '<p class="muted">Нічого не знайдено.</p>';
   } else {
-    main = '<div class="card"><p style="margin:0 0 8px"><b>Сповіщення</b></p><p class="muted">Пуш про тривогу і нові повідомлення. На iPhone — після «На екран «Домашній»».</p></div>' +
-      '<button class="toggle' + (pushOn() ? " on" : "") + '" id="push-toggle"><span>Пуш-повідомлення</span><span class="switch"><i></i></span></button>' +
+    main = '<div class="card"><p style="margin:0 0 8px"><b>Сповіщення</b></p><p class="muted">Звук і пуш лише з офіційних джерел: карта тривог, КМВА, Київська ОВА. Моніторингові канали в стрічці мовчать.</p></div>' +
+      '<button class="toggle' + (pushOn() ? " on" : "") + '" id="push-toggle"><span>Офіційна тривога</span><span class="switch"><i></i></span></button>' +
       '<p class="muted" id="push-status" style="margin:10px 2px 0">' + pushStatusText() + "</p>" +
       '<div class="card" style="margin-top:16px"><p class="muted" style="margin:0">Оновлення з публічних Telegram-каналів кожні 25 с. Свайп зверху вниз — оновити зараз.</p></div>';
   }
@@ -407,12 +463,11 @@ async function loadFeed() {
       if (data.alert) alertStatus = data.alert;
       if (data.stats) feedStats = data.stats;
       if (bootDone) {
-        if (alertStatus.level !== lastAlertLevel && (alertStatus.level === "red" || alertStatus.level === "yellow")) {
+        if (alertStatus.level !== lastAlertLevel && alertStatus.level === "red") {
+          playOfficialSiren();
           notifyUser(alertStatus.title + " · " + alertStatus.where, alertStatus.detail, "pulse-alert");
-        }
-        const fresh = messages.filter(function (m) { return !seenIds.has(m.id); });
-        if (fresh.length) {
-          notifyUser(fresh[0].s.title, String(fresh[0].text || "").slice(0, 140), "pulse-msg");
+        } else if (alertStatus.level !== "red") {
+          stopSiren();
         }
       }
       bootDone = true;
@@ -426,6 +481,8 @@ if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js").catch(function () {});
 }
 setInterval(loadFeed, 25000);
+document.addEventListener("pointerdown", unlockAudio, { once: true });
+document.addEventListener("touchstart", unlockAudio, { once: true });
 render();
 loadFeed();
 </script>
