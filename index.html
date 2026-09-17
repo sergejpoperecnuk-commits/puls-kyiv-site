@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
 <meta name="theme-color" content="#09090b"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<link rel="manifest" href="/manifest.json"/>
+<link rel="apple-touch-icon" href="/icon-192.png"/>
 <title>Пульс Києва</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap"/>
 <style>
@@ -72,7 +75,31 @@ button:not(:disabled) { cursor: pointer; }
 .main { overflow: auto; padding: 20px 16px 24px; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch; }
 .rail { border-left: 1px solid var(--hair); overflow: auto; padding: 22px 18px; background: var(--panel); }
 .hero { background: var(--panel); border: 1px solid var(--hair); border-radius: 16px; padding: 16px; margin-bottom: 18px; }
+.hero h3 { margin: 6px 0 0; font-size: 17px; }
 .hero-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.live {
+  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+  border: 1px solid var(--hair); background: var(--raised);
+  border-radius: 999px; padding: 6px 10px; font-size: 12px; color: var(--quiet);
+}
+.live-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--signal);
+  box-shadow: 0 0 0 4px rgb(125 207 182 / .2);
+}
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+.stat { background: var(--raised); border-radius: 10px; padding: 10px 12px; margin: 0; }
+.stat dt { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); font-weight: 600; }
+.stat dd { margin: 6px 0 0; font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.stat.quiet dd { color: var(--quiet); }
+.toggle {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  width: 100%; border: 0; background: var(--raised); color: var(--ink);
+  border-radius: 12px; padding: 14px 16px; text-align: left;
+}
+.switch { width: 40px; height: 24px; border-radius: 999px; background: #2a2c32; position: relative; flex-shrink: 0; }
+.switch i { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #c7c8cc; transition: .2s; }
+.toggle.on .switch { background: var(--signal); }
+.toggle.on .switch i { left: 19px; background: #09110e; }
 .siren {
   display: inline-flex; align-items: center; gap: 8px;
   margin-top: 12px; border-radius: 999px; padding: 8px 12px;
@@ -102,6 +129,7 @@ button:not(:disabled) { cursor: pointer; }
   .body { grid-template-columns: 1fr; }
   .search { width: min(52vw, 220px); }
   .main { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+  .stats { grid-template-columns: 1fr 1fr; }
   .dock {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
@@ -163,6 +191,65 @@ function ago(ts) {
 }
 let tab = "home", q = "", cat = "Усі", messages = [];
 let alertStatus = { level: "clear", title: "Немає тривоги", where: "Київ", detail: "перевіряємо…" };
+let feedStats = { today: 0, last24h: 0, sourceCount: 9, scraperOk: false };
+function liveBadge() {
+  return '<div class="live"><span class="live-dot"></span> Наживо</div>';
+}
+function statsGrid() {
+  const s = feedStats;
+  function box(label, value, quiet) {
+    return '<div class="stat' + (quiet ? " quiet" : "") + '"><dt>' + label + "</dt><dd>" + value + "</dd></div>";
+  }
+  return '<dl class="stats">' +
+    box("Сьогодні", s.today || messages.length) +
+    box("За добу", s.last24h || messages.length) +
+    box("Джерела", s.sourceCount || SOURCES.length) +
+    box("Telegram", s.scraperOk ? "мережа" : (messages.length ? "мережа" : "резерв"), !s.scraperOk && !messages.length) +
+    "</dl>";
+}
+function heroBlock() {
+  const latest = messages[0];
+  const lastLine = latest ? ("Останнє · " + ago(latest.t) + " · " + latest.s.title) : "Відкриті Telegram-канали зі списку джерел";
+  return '<div class="hero"><div class="hero-top"><div><div class="kicker">Огляд</div><h3>Наживо по Києву</h3><p class="muted" style="margin:6px 0 0">' + lastLine + "</p></div>" + liveBadge() + "</div>" + sirenBlock() + statsGrid() + "</div>";
+}
+function pushOn() {
+  return localStorage.getItem("pulse-push") === "1" && typeof Notification !== "undefined" && Notification.permission === "granted";
+}
+function pushStatusText() {
+  if (typeof Notification === "undefined") return "Цей браузер не вміє пуш.";
+  if (Notification.permission === "denied") return "Браузер заборонив сповіщення. Дозвольте їх у налаштуваннях сайту.";
+  if (pushOn()) return "Увімкнено: тривога і нові пости.";
+  return "Вимкнено.";
+}
+let seenIds = new Set();
+let lastAlertLevel = "";
+let bootDone = false;
+function notifyUser(title, body, tag) {
+  if (!pushOn()) return;
+  const opts = { body: body || "", tag: tag || "pulse", lang: "uk", icon: "/icon-192.png", badge: "/icon-192.png", vibrate: [140, 70, 140] };
+  if (navigator.serviceWorker) {
+    navigator.serviceWorker.ready.then(function (reg) { reg.showNotification(title, opts); }).catch(function () { try { new Notification(title, opts); } catch (e) {} });
+  } else {
+    try { new Notification(title, opts); } catch (e) {}
+  }
+}
+async function setPush(on) {
+  if (!on) {
+    localStorage.setItem("pulse-push", "0");
+    render();
+    return;
+  }
+  if (typeof Notification === "undefined") return;
+  const perm = await Notification.requestPermission();
+  if (perm === "granted") {
+    localStorage.setItem("pulse-push", "1");
+    try { await navigator.serviceWorker.register("/sw.js"); } catch (e) {}
+    notifyUser("Пульс Києва", "Сповіщення увімкнено", "pulse-on");
+  } else {
+    localStorage.setItem("pulse-push", "0");
+  }
+  render();
+}
 function sirenBlock() {
   const a = alertStatus || {};
   const level = a.level === "red" || a.level === "yellow" ? a.level : "clear";
@@ -186,7 +273,7 @@ function render() {
   savedScroll = prevMain ? prevMain.scrollTop : savedScroll;
   let main = "";
   if (tab === "home") {
-    main = '<div class="hero"><div class="hero-top"><div><div class="kicker">Огляд</div><h3 style="margin:6px 0 0">Наживо по Києву</h3></div></div>' + sirenBlock() + '<p class="muted" style="margin:10px 2px 0">' + messages.length + " повідомлень з Telegram</p></div>" + list.slice(0, 8).map(card).join("");
+    main = heroBlock() + (pushOn() ? "" : '<button class="toggle" id="push-home" style="margin-bottom:14px"><span>Увімкнути пуш про тривогу</span><span class="switch"><i></i></span></button>') + list.slice(0, 8).map(card).join("");
   } else if (tab === "feed") {
     main = list.map(card).join("") || '<p class="muted">Чекаємо пости…</p>';
   } else if (tab === "sources") {
@@ -196,7 +283,10 @@ function render() {
   } else if (tab === "search") {
     main = list.length ? list.map(card).join("") : '<p class="muted">Нічого не знайдено.</p>';
   } else {
-    main = '<p class="muted">Оновлення з публічних Telegram-каналів кожні 25 с.</p>';
+    main = '<div class="card"><p style="margin:0 0 8px"><b>Сповіщення</b></p><p class="muted">Пуш про тривогу і нові повідомлення. На iPhone — після «На екран «Домашній»».</p></div>' +
+      '<button class="toggle' + (pushOn() ? " on" : "") + '" id="push-toggle"><span>Пуш-повідомлення</span><span class="switch"><i></i></span></button>' +
+      '<p class="muted" id="push-status" style="margin:10px 2px 0">' + pushStatusText() + "</p>" +
+      '<div class="card" style="margin-top:16px"><p class="muted" style="margin:0">Оновлення з публічних Telegram-каналів кожні 25 с. Свайп зверху вниз — оновити зараз.</p></div>';
   }
   const sideNav = TABS.map(function (item) {
     return '<button class="' + (tab === item.id ? "on" : "") + '" data-tab="' + item.id + '">' + icon(item.icon) + " " + item.label + "</button>";
@@ -221,6 +311,14 @@ function render() {
   if (newMain) {
     newMain.scrollTop = savedScroll;
     bindPtr(newMain);
+  }
+  const pushBtn = document.getElementById("push-toggle");
+  if (pushBtn) {
+    pushBtn.onclick = function () { setPush(!pushOn()); };
+  }
+  const pushHome = document.getElementById("push-home");
+  if (pushHome) {
+    pushHome.onclick = function () { setPush(true); };
   }
 }
 let savedScroll = 0;
@@ -281,9 +379,25 @@ async function loadFeed() {
     if (data.ok) {
       if (data.messages && data.messages.length) messages = data.messages;
       if (data.alert) alertStatus = data.alert;
+      if (data.stats) feedStats = data.stats;
+      if (bootDone) {
+        if (alertStatus.level !== lastAlertLevel && (alertStatus.level === "red" || alertStatus.level === "yellow")) {
+          notifyUser(alertStatus.title + " · " + alertStatus.where, alertStatus.detail, "pulse-alert");
+        }
+        const fresh = messages.filter(function (m) { return !seenIds.has(m.id); });
+        if (fresh.length) {
+          notifyUser(fresh[0].s.title, String(fresh[0].text || "").slice(0, 140), "pulse-msg");
+        }
+      }
+      bootDone = true;
+      lastAlertLevel = alertStatus.level || "";
+      seenIds = new Set(messages.map(function (m) { return m.id; }));
       render();
     }
   } catch (e) {}
+}
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js").catch(function () {});
 }
 setInterval(loadFeed, 25000);
 render();

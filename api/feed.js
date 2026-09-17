@@ -220,15 +220,24 @@ export default async function handler(req, res) {
     fetchJson("https://alerts.com.ua/api/states/9", 5000),
   ]);
   const seen = new Set();
-  const messages = lists
+  const all = lists
     .flat()
     .filter((m) => {
       if (seen.has(m.id)) return false;
       seen.add(m.id);
       return true;
     })
-    .sort((a, b) => b.t - a.t)
-    .slice(0, 60);
+    .sort((a, b) => b.t - a.t);
+  const now = Date.now();
+  const todayKey = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Kyiv" });
+  const isToday = (t) => new Date(t).toLocaleDateString("en-CA", { timeZone: "Europe/Kyiv" }) === todayKey;
+  const stats = {
+    today: all.filter((m) => isToday(m.t)).length,
+    last24h: all.filter((m) => now - m.t < 86400000).length,
+    sourceCount: SOURCES.length,
+    scraperOk: all.length > 0,
+  };
+  const messages = all.slice(0, 60);
   const alert = buildAlert(messages, cityWrap && cityWrap.state, oblastWrap && oblastWrap.state);
-  res.status(200).json({ ok: true, at: Date.now(), count: messages.length, alert, messages });
+  res.status(200).json({ ok: true, at: Date.now(), count: messages.length, stats, alert, messages });
 }
