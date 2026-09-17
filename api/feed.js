@@ -223,6 +223,52 @@ function mentionsBucha(text) {
   return /бучанськ|\bбуча\b|\bбучі\b|ірпін|гостом|бородян|макарів|ворзел|коцюбинськ|немшаїв|пісківк/.test(t);
 }
 
+function isKyivRelevant(text) {
+  const t = String(text || "").toLowerCase();
+  if (/києв|київ|киев|област|буч|ірпін|гостом|київщин|киевщин/.test(t)) return true;
+  if (/харків|одес|дніпр|львів|запоріж|микола|херсон|сум\b|полтав|черніг|житом|вінниц/.test(t)) return false;
+  return true;
+}
+
+function findUrgent(messages) {
+  const windowMs = 12 * 60 * 1000;
+  let ballisticOn = 0;
+  let ballisticOff = 0;
+  let migOn = 0;
+  let migOff = 0;
+  const ballisticRe = /балістик|баллистик|ballistic|іскандер|искандер|iskander|кинжал|кинджал|kinzhal|\bкн-?23\b|\bkn-?23\b/;
+  const ballisticOffRe = /відбій.{0,24}баліст|баліст.{0,24}відбій/;
+  const migRe = /(виліт|зліт|піднят|поднял|takeoff).{0,28}(міг|миг|mig)[\s-]*31|(міг|миг|mig)[\s-]*31.{0,28}(виліт|зліт|піднят|в повітря)/;
+  const migOffRe = /посадк.{0,20}(міг|миг|mig)|(міг|миг|mig).{0,16}(сів|посадк)/;
+  for (const m of messages || []) {
+    if (Date.now() - m.t > windowMs) continue;
+    const text = String(m.text || "").toLowerCase();
+    if (!isKyivRelevant(text)) continue;
+    if (ballisticOffRe.test(text)) ballisticOff = Math.max(ballisticOff, m.t);
+    else if (ballisticRe.test(text)) ballisticOn = Math.max(ballisticOn, m.t);
+    if (migOffRe.test(text)) migOff = Math.max(migOff, m.t);
+    else if (migRe.test(text)) migOn = Math.max(migOn, m.t);
+  }
+  if (ballisticOn > ballisticOff) return { kind: "ballistic", since: ballisticOn };
+  if (migOn > migOff) return { kind: "mig31", since: migOn };
+  return null;
+}
+
+function urgentAlert(urgent, buchaOn) {
+  const ballistic = urgent.kind === "ballistic";
+  return {
+    level: "red",
+    title: "Тривога",
+    where: ballistic ? "Балістика" : "МіГ-31",
+    detail: (ballistic ? "загроза балістики · з " : "виліт МіГ-31 · з ") + formatSince(urgent.since),
+    since: urgent.since,
+    source: "monitor",
+    bucha: buchaOn,
+    siren: true,
+    kind: urgent.kind,
+  };
+}
+
 function buildAlert(messages, cityWrap, oblastWrap, ajaxOblast, ajaxCity) {
   const cityOn = isFreshOn(cityWrap) || ajaxOnKyiv(ajaxCity);
   const oblastOn = isFreshOn(oblastWrap) || ajaxOnKyiv(ajaxOblast);
@@ -250,6 +296,9 @@ function buildAlert(messages, cityWrap, oblastWrap, ajaxOblast, ajaxCity) {
   }
 
   const buchaOn = oblastOn || lastBuchaRed > lastBuchaClear;
+  const urgent = findUrgent(messages);
+  if (urgent) return urgentAlert(urgent, buchaOn);
+
   const anyOn = cityOn || buchaOn;
 
   if (anyOn) {
@@ -269,6 +318,8 @@ function buildAlert(messages, cityWrap, oblastWrap, ajaxOblast, ajaxCity) {
       since: since || Date.now(),
       source: "official",
       bucha: buchaOn,
+      siren: buchaOn,
+      kind: "air",
     };
   }
 
@@ -282,6 +333,8 @@ function buildAlert(messages, cityWrap, oblastWrap, ajaxOblast, ajaxCity) {
       since,
       source: "official",
       bucha: false,
+      siren: false,
+      kind: "clear",
     };
   }
 
@@ -293,6 +346,8 @@ function buildAlert(messages, cityWrap, oblastWrap, ajaxOblast, ajaxCity) {
     since: Date.now(),
     source: "official",
     bucha: false,
+    siren: false,
+    kind: "clear",
   };
 }
 
