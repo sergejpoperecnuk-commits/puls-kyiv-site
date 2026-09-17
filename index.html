@@ -352,7 +352,7 @@ function statsGrid() {
 function heroBlock() {
   const latest = messages[0];
   const lastLine = latest ? ("Останнє · " + ago(latest.t) + " · " + latest.s.title) : "Відкриті Telegram-канали зі списку джерел";
-  return '<div class="hero"><div class="hero-top"><div><div class="kicker">Огляд</div><div class="city-head">' + motherlandMark() + '<div class="city-name"><h3>Київ</h3><p class="byline">powered by Poperechiuk_S</p></div></div><p class="muted" style="margin:6px 0 0">' + lastLine + "</p></div>" + liveBadge() + "</div>" + sirenBlock() + statsGrid() + "</div>";
+  return '<div class="hero"><div class="hero-top"><div><div class="kicker">Огляд</div><div class="city-head">' + motherlandMark() + '<div class="city-name"><h3>Київ</h3><p class="byline">created by Poperechiuk_S</p></div></div><p class="muted" style="margin:6px 0 0">' + lastLine + "</p></div>" + liveBadge() + "</div>" + sirenBlock() + statsGrid() + "</div>";
 }
 function pushOn() {
   return localStorage.getItem("pulse-push") === "1" && typeof Notification !== "undefined" && Notification.permission === "granted";
