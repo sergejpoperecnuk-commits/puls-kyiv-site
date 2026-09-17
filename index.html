@@ -33,7 +33,9 @@ button:not(:disabled) { cursor: pointer; }
 .nav button {
   display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 12px;
   border: 0; border-radius: 10px; background: transparent; color: var(--quiet);
+  overflow: hidden; white-space: nowrap;
 }
+.nav button svg { width: 16px; height: 16px; flex-shrink: 0; }
 .nav button.on { background: var(--raised); color: var(--ink); }
 .col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .top {
@@ -112,7 +114,7 @@ const TABS = [
   { id: "settings", label: "Налаштування", title: "Налаштування", icon: "gear" },
 ];
 function icon(name) {
-  const p = 'fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"';
+  const p = 'width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"';
   if (name === "home") return '<svg viewBox="0 0 24 24" '+p+'><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>';
   if (name === "feed") return '<svg viewBox="0 0 24 24" '+p+'><circle cx="12" cy="12" r="2"/><path d="M5 12a7 7 0 0 1 7-7"/><path d="M19 12a7 7 0 0 0-7-7"/><path d="M2 12a10 10 0 0 1 10-10"/><path d="M22 12a10 10 0 0 0-10-10"/></svg>';
   if (name === "src") return '<svg viewBox="0 0 24 24" '+p+'><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>';
