@@ -7,7 +7,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <link rel="manifest" href="/manifest.json"/>
-<link rel="apple-touch-icon" href="/icon-192.png"/>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg"/>
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png"/>
+<link rel="apple-touch-icon" href="/apple-touch-icon.png"/>
 <title>Пульс Києва</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap"/>
 <style>
@@ -49,8 +51,7 @@ button:not(:disabled) { cursor: pointer; }
   border-right: 1px solid var(--hair); background: var(--panel); padding: 22px 12px 16px;
 }
 .brand { display: flex; gap: 10px; align-items: center; padding: 0 8px 28px; }
-.mark { width: 28px; height: 28px; border-radius: 8px; position: relative; box-shadow: 0 0 0 1px rgb(125 207 182 / .35); }
-.mark:after { content: ""; position: absolute; inset: 8px; border-radius: 50%; background: var(--signal); }
+.mark { width: 28px; height: 28px; border-radius: 8px; display: block; flex-shrink: 0; box-shadow: 0 0 0 1px rgb(125 207 182 / .35); }
 .nav { display: flex; flex-direction: column; gap: 4px; }
 .nav button {
   display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 12px;
@@ -192,6 +193,9 @@ function ago(ts) {
 let tab = "home", q = "", cat = "Усі", messages = [];
 let alertStatus = { level: "clear", title: "Немає тривоги", where: "Київ", detail: "перевіряємо…" };
 let feedStats = { today: 0, last24h: 0, sourceCount: 9, scraperOk: false };
+function pulseMark() {
+  return '<svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#191b20"/><path d="M6.5 17.5h3.6l2.2-7 3.8 13 2.6-6h6.8" fill="none" stroke="#7dcfb6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+}
 function liveBadge() {
   return '<div class="live"><span class="live-dot"></span> Наживо</div>';
 }
@@ -295,7 +299,7 @@ function render() {
     return '<button class="' + (tab === item.id ? "on" : "") + '" data-tab="' + item.id + '">' + icon(item.icon) + "<span>" + item.label + "</span></button>";
   }).join("");
   document.getElementById("root").innerHTML =
-    '<div class="app"><aside class="side"><div class="brand"><div class="mark"></div><div><b>Пульс Києва</b><br><small class="muted">Цивільний моніторинг</small></div></div><nav class="nav">' + sideNav + '</nav></aside><div class="col"><header class="top"><div><h2>' + titles.title + '</h2><p class="muted" style="margin:2px 0 0">' + messages.length + ' повідомлень</p></div><div class="search"><input id="q" placeholder="Пошук у стрічці"/></div></header><div class="body"><section class="main">' + main + '</section><aside class="rail"><div class="kicker">Сьогодні</div><p style="font-size:36px;margin:4px 0">' + messages.length + "</p>" + CATS.map(function (c) { return '<button data-cat="' + c + '" class="' + (c === cat ? "on" : "") + '" style="margin:4px 4px 0 0;border:0;border-radius:999px;padding:6px 10px;background:' + (c === cat ? "var(--ink)" : "var(--raised)") + ';color:' + (c === cat ? "var(--canvas)" : "var(--quiet)") + '">' + c + "</button>"; }).join("") + SOURCES.map(function (s) { return '<p>' + s.title + '<br><small class="muted">@' + s.user + "</small></p>"; }).join("") + '</aside></div></div></div><nav class="dock" aria-label="Розділи">' + dock + "</nav>";
+    '<div class="app"><aside class="side"><div class="brand">' + pulseMark() + '<div><b>Пульс Києва</b><br><small class="muted">Цивільний моніторинг</small></div></div><nav class="nav">' + sideNav + '</nav></aside><div class="col"><header class="top"><div><h2>' + titles.title + '</h2><p class="muted" style="margin:2px 0 0">' + messages.length + ' повідомлень</p></div><div class="search"><input id="q" placeholder="Пошук у стрічці"/></div></header><div class="body"><section class="main">' + main + '</section><aside class="rail"><div class="kicker">Сьогодні</div><p style="font-size:36px;margin:4px 0">' + messages.length + "</p>" + CATS.map(function (c) { return '<button data-cat="' + c + '" class="' + (c === cat ? "on" : "") + '" style="margin:4px 4px 0 0;border:0;border-radius:999px;padding:6px 10px;background:' + (c === cat ? "var(--ink)" : "var(--raised)") + ';color:' + (c === cat ? "var(--canvas)" : "var(--quiet)") + '">' + c + "</button>"; }).join("") + SOURCES.map(function (s) { return '<p>' + s.title + '<br><small class="muted">@' + s.user + "</small></p>"; }).join("") + '</aside></div></div></div><nav class="dock" aria-label="Розділи">' + dock + "</nav>";
   document.querySelectorAll("[data-tab]").forEach(function (b) {
     b.onclick = function () { tab = b.getAttribute("data-tab"); render(); };
   });
