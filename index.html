@@ -325,6 +325,11 @@ function soundOn() {
 }
 function readWatch() {
   try {
+    if (!localStorage.getItem("pulse-watch-v2")) {
+      localStorage.setItem("pulse-watch-v2", "1");
+      localStorage.removeItem("pulse-watch");
+      return [];
+    }
     const raw = JSON.parse(localStorage.getItem("pulse-watch") || "null");
     if (Array.isArray(raw) && raw.length) {
       const ids = raw.map(Number).filter(function (id) {
@@ -333,7 +338,7 @@ function readWatch() {
       if (ids.length) return ids;
     }
   } catch (e) {}
-  return [75];
+  return [];
 }
 function saveWatch(ids) {
   localStorage.setItem("pulse-watch", JSON.stringify(ids));
@@ -347,6 +352,19 @@ function applyLocalAlert(base, list) {
     return Object.assign({}, base, { siren: true });
   }
   const selected = readWatch();
+  if (!selected.length) {
+    return {
+      level: "clear",
+      title: "Оберіть район",
+      where: "налаштування",
+      detail: "Позначте свій район у налаштуваннях. Сирена і пуш лише для нього.",
+      since: Date.now(),
+      source: "official",
+      bucha: false,
+      siren: false,
+      kind: "clear",
+    };
+  }
   const picked = (list || []).filter(function (z) { return selected.indexOf(z.id) !== -1; });
   const red = picked.filter(function (z) { return z.level === "red"; });
   const yellow = picked.filter(function (z) { return z.level === "yellow"; });
@@ -396,7 +414,7 @@ function setWatch(ids) {
   const clean = ids.map(Number).filter(function (id) {
     return WATCH_AREAS.some(function (a) { return a.id === id; });
   });
-  saveWatch(clean.length ? clean : [75]);
+  saveWatch(clean);
   const prev = alertStatus;
   alertStatus = applyLocalAlert(serverAlert, zones);
   if (alertStatus.siren && soundOn() && (alertStatus.where !== prev.where || alertStatus.level !== prev.level)) {
@@ -410,7 +428,6 @@ function toggleWatch(id) {
   let ids = readWatch().slice();
   const i = ids.indexOf(n);
   if (i >= 0) {
-    if (ids.length === 1) return;
     ids.splice(i, 1);
   } else {
     ids.push(n);
@@ -423,9 +440,9 @@ function watchBox() {
     const on = selected.indexOf(a.id) !== -1;
     return '<button class="toggle' + (on ? " on" : "") + '" data-watch="' + a.id + '"><span>' + a.name + '</span><span class="switch"><i></i></span></button>';
   }).join("");
-  return '<div class="card" style="margin-top:16px"><p style="margin:0 0 8px"><b>Райони для сирени</b></p><p class="muted" style="margin:0 0 10px">Сирена і пуш лише для позначених. Карта — alerts.in.ua. Балістика і МіГ-31 — завжди.</p>' +
+  return '<div class="card" style="margin-top:16px"><p style="margin:0 0 8px"><b>Ваш район</b></p><p class="muted" style="margin:0 0 10px">Оберіть район, де ви є. Сирена і пуш лише для нього. Балістика і МіГ-31 — завжди.</p>' +
     rows +
-    '<div class="watch-actions"><button type="button" id="watch-all">Усі райони</button><button type="button" id="watch-bucha">Лише Буча</button></div></div>';
+    '<div class="watch-actions"><button type="button" id="watch-all">Усі райони</button><button type="button" id="watch-none">Скинути</button></div></div>';
 }
 function setSound(on) {
   localStorage.setItem("pulse-sound", on ? "1" : "0");
@@ -436,7 +453,10 @@ function setSound(on) {
 function pushStatusText() {
   if (typeof Notification === "undefined") return "Цей браузер не вміє пуш.";
   if (Notification.permission === "denied") return "Браузер заборонив сповіщення. Дозвольте їх у налаштуваннях сайту.";
-  if (pushOn()) return "Увімкнено: " + watchNames(readWatch()) + ".";
+  if (pushOn()) {
+    const names = watchNames(readWatch());
+    return names ? "Увімкнено: " + names + "." : "Увімкнено. Спочатку оберіть район вище.";
+  }
   return "Вимкнено.";
 }
 let seenIds = new Set();
@@ -555,7 +575,7 @@ async function setPush(on) {
     localStorage.setItem("pulse-push", "1");
     unlockAudio();
     try { await navigator.serviceWorker.register("/sw.js"); } catch (e) {}
-    notifyUser("Пульс Києва", "Пуш для " + watchNames(readWatch()) + " увімкнено", "pulse-on");
+    notifyUser("Пульс Києва", watchNames(readWatch()) ? "Пуш для " + watchNames(readWatch()) + " увімкнено" : "Пуш увімкнено. Оберіть свій район.", "pulse-on");
   } else {
     localStorage.setItem("pulse-push", "0");
   }
@@ -587,7 +607,9 @@ function render() {
   savedScroll = prevMain ? prevMain.scrollTop : savedScroll;
   let main = "";
   if (tab === "home") {
-    main = heroBlock() + (soundOn() ? "" : '<button class="toggle" id="sound-home" style="margin-bottom:14px"><span>Увімкнути звук для обраних районів</span><span class="switch"><i></i></span></button>') + list.slice(0, 8).map(card).join("");
+    main = heroBlock() +
+      (readWatch().length ? "" : '<div class="card" style="margin-bottom:14px"><p style="margin:0 0 8px"><b>Оберіть свій район</b></p><p class="muted" style="margin:0 0 10px">Сирена не прив’язана до Бучі. Позначте район, де ви є.</p><button class="test-btn" id="go-watch" style="background:var(--signal);color:#09110e">До налаштувань</button></div>') +
+      (soundOn() ? "" : '<button class="toggle" id="sound-home" style="margin-bottom:14px"><span>Увімкнути звук тривоги</span><span class="switch"><i></i></span></button>') + list.slice(0, 8).map(card).join("");
   } else if (tab === "feed") {
     main = list.map(card).join("") || '<p class="muted">Чекаємо пости…</p>';
   } else if (tab === "sources") {
@@ -600,9 +622,9 @@ function render() {
   } else if (tab === "search") {
     main = list.length ? list.map(card).join("") : '<p class="muted">Нічого не знайдено.</p>';
   } else {
-    main = '<div class="card"><p style="margin:0 0 8px"><b>Сповіщення</b></p><p class="muted">Сирена 10 секунд, один раз: тривога в обраних районах, загроза балістики або виліт МіГ-31. Без повтору, поки подія та сама.</p></div>' +
+    main = '<div class="card"><p style="margin:0 0 8px"><b>Сповіщення</b></p><p class="muted">Сирена 10 секунд, один раз: тривога в обраному районі, загроза балістики або виліт МіГ-31.</p></div>' +
       '<button class="toggle' + (soundOn() ? " on" : "") + '" id="sound-toggle"><span>Звук тривоги</span><span class="switch"><i></i></span></button>' +
-      '<p class="muted" style="margin:10px 2px 16px">' + (soundOn() ? "Увімкнено: сирена для " + watchNames(readWatch()) + "." : "Вимкнено.") + "</p>" +
+      '<p class="muted" style="margin:10px 2px 16px">' + (soundOn() ? (watchNames(readWatch()) ? "Увімкнено: сирена для " + watchNames(readWatch()) + "." : "Звук увімкнено. Оберіть район нижче.") : "Вимкнено.") + "</p>" +
       '<button class="toggle' + (pushOn() ? " on" : "") + '" id="push-toggle"><span>Пуш-повідомлення</span><span class="switch"><i></i></span></button>' +
       '<p class="muted" id="push-status" style="margin:10px 2px 0">' + pushStatusText() + "</p>" +
       watchBox() +
@@ -653,6 +675,8 @@ function render() {
   if (soundHome) {
     soundHome.onclick = function () { setSound(true); };
   }
+  const goWatch = document.getElementById("go-watch");
+  if (goWatch) goWatch.onclick = function () { tab = "more"; render(); };
   const testBtn = document.getElementById("test-boost");
   if (testBtn) {
     testBtn.onclick = function () { runTestBoost(); };
@@ -662,8 +686,8 @@ function render() {
   });
   const watchAll = document.getElementById("watch-all");
   if (watchAll) watchAll.onclick = function () { setWatch(WATCH_AREAS.map(function (a) { return a.id; })); };
-  const watchBucha = document.getElementById("watch-bucha");
-  if (watchBucha) watchBucha.onclick = function () { setWatch([75]); };
+  const watchNone = document.getElementById("watch-none");
+  if (watchNone) watchNone.onclick = function () { setWatch([]); };
   const extraInp = document.getElementById("extra-q");
   if (extraInp) {
     extraInp.value = extraDraft;
