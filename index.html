@@ -15,7 +15,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png"/>
 <link rel="apple-touch-icon" href="/apple-touch-icon.png"/>
 <title>Пульс Києва</title>
-<!-- pulse-chrome-v17-airfields-20260918 -->
+<!-- pulse-chrome-v18-airfield-red-20260918 -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
@@ -129,12 +129,23 @@ button:not(:disabled) { cursor: pointer; }
 .af-row {
   display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
   background: var(--raised); border-radius: 10px; padding: 10px 12px; margin-top: 6px;
+  border: 1px solid transparent;
 }
 .af-row b { font-size: 13px; font-weight: 600; }
 .af-st { font-size: 12px; font-weight: 650; white-space: nowrap; }
-.af-st.hot { color: var(--danger); }
+.af-st.hot { color: #fff; }
 .af-st.quiet { color: var(--signal); }
 .af-st.none { color: var(--quiet); }
+.af-row.hot {
+  background: rgb(224 112 112 / .22);
+  border-color: rgb(224 112 112 / .55);
+  color: #f3c0c0;
+  animation: afglow 1.4s ease-in-out infinite;
+}
+.af.lit .kicker { color: var(--danger); }
+@keyframes afglow {
+  50% { background: rgb(224 112 112 / .42); box-shadow: 0 0 18px rgb(224 112 112 / .25); }
+}
 .toggle {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   width: 100%; border: 0; background: var(--raised); color: var(--ink);
@@ -535,7 +546,7 @@ const AIRFIELD_SITES = [
 ];
 function airfieldActivity() {
   const now = Date.now();
-  return AIRFIELD_SITES.map(function (site) {
+  const named = AIRFIELD_SITES.map(function (site) {
     let best = null;
     messages.forEach(function (m) {
       if (!site[2].test(m.text || "")) return;
@@ -545,18 +556,36 @@ function airfieldActivity() {
       return { name: site[1], cls: "none", label: "немає згадок" };
     }
     const t = String(best.text || "");
+    const ownStrike = /уразил|удар по|атакув.{0,20}аеродром|дрон[ии].{0,24}сбу|гур урази/.test(t);
     const quiet = /не активн|без пуск|пусків немає|відсутн/.test(t);
-    const hot = !quiet && /пуск|запуск|старт|підйом|виліт|активн|підтверджен/.test(t);
+    const hot = !ownStrike && !quiet && /пуск|запуск|старт|підйом|виліт|активн|підтверджен|з позиц|з майданчик/.test(t);
     if (hot) return { name: site[1], cls: "hot", label: "пуски · " + ago(best.t) };
     if (quiet) return { name: site[1], cls: "quiet", label: "не активно · " + ago(best.t) };
     return { name: site[1], cls: "quiet", label: "згадка · " + ago(best.t) };
   });
+  let other = null;
+  messages.forEach(function (m) {
+    const t = String(m.text || "");
+    if (now - m.t > 10 * 60 * 60 * 1000) return;
+    if (/уразил|удар по|атакув.{0,20}аеродром|дрон[ии].{0,24}сбу|гур урази/.test(t)) return;
+    if (/не активн|без пуск|пусків немає/.test(t)) return;
+    const launch = /пуск[аиів]?\s+(з|із)|запуск[аи]?\s+(з|із)|з\s+(аеродром|позиц|майданчик)|відмічено пуск|шахед.{0,40}(з |із )/.test(t);
+    if (!launch) return;
+    const known = AIRFIELD_SITES.some(function (site) { return site[2].test(t); });
+    if (known) return;
+    if (!other || m.t > other.t) other = m;
+  });
+  if (other) named.push({ name: "Інші позиції", cls: "hot", label: "пуски · " + ago(other.t) });
+  else named.push({ name: "Інші позиції", cls: "none", label: "немає згадок" });
+  return named;
 }
 function airfieldBlock() {
-  const rows = airfieldActivity().map(function (r) {
-    return '<div class="af-row"><b>' + r.name + '</b><span class="af-st ' + r.cls + '">' + r.label + "</span></div>";
+  const list = airfieldActivity();
+  const lit = list.some(function (r) { return r.cls === "hot"; });
+  const rows = list.map(function (r) {
+    return '<div class="af-row' + (r.cls === "hot" ? " hot" : "") + '"><b>' + r.name + '</b><span class="af-st ' + r.cls + '">' + r.label + "</span></div>";
   }).join("");
-  return '<div class="af"><div class="kicker">Пуски БпЛА</div><p class="muted" style="margin:6px 0 8px">Ворожі майданчики з відкритих каналів. Лише згадки, без координат.</p>' + rows + "</div>";
+  return '<div class="af' + (lit ? " lit" : "") + '"><div class="kicker">Пуски БпЛА</div><p class="muted" style="margin:6px 0 8px">Ворожі майданчики з відкритих каналів. Лише згадки, без координат.</p>' + rows + "</div>";
 }
 function pushOn() {
   return localStorage.getItem("pulse-push") === "1" && typeof Notification !== "undefined" && Notification.permission === "granted";
