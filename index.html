@@ -487,7 +487,13 @@ function render() {
       '<button class="test-btn" id="test-boost"' + (testBusy ? " disabled" : "") + ">" + (testBusy ? "Тест іде…" : "Тестова тривога") + "</button>" +
       '<p class="muted" style="margin:10px 2px 0">Сирена 10 секунд і пуш. Напис ТЕСТ. Справжню тривогу не оголошує.</p>' +
       '<div class="card" style="margin-top:16px"><p class="muted" style="margin:0">Оновлення з публічних Telegram-каналів кожні 15 с. Свайп зверху вниз — оновити зараз.</p></div>' +
-      '<div class="card" style="margin-top:12px"><p style="margin:0 0 8px"><b>Приватність</b></p><p class="muted" style="margin:0">Ця програма не використовує геодані, не запитує місцезнаходження і не відстежує пристрій. Налаштування зберігаються лише на вашому телефоні.</p></div>';
+      '<div class="card" style="margin-top:12px"><p style="margin:0 0 8px"><b>Приватність</b></p><p class="muted" style="margin:0">Ця програма не використовує геодані, не запитує місцезнаходження і не відстежує пристрій. Налаштування зберігаються лише на вашому телефоні.</p></div>' +
+      '<div class="card" style="margin-top:12px"><p style="margin:0 0 8px"><b>На робочий екран</b></p>' +
+      '<p class="muted" style="margin:0 0 10px">Тоді Пульс відкривається як звичайний додаток, без рядка браузера.</p>' +
+      '<p style="margin:0 0 6px"><b>iPhone</b></p>' +
+      '<p class="muted" style="margin:0 0 12px">1. Відкрийте сайт у Safari (не в Telegram і не в Chrome).<br>2. Внизу натисніть квадрат зі стрілкою вгору — «Поділитися».<br>3. Прокрутіть список і натисніть «На екран «Домівка»».<br>4. Натисніть «Додати».<br>5. На екрані з’явиться іконка Пульс. Відкривайте саме її.</p>' +
+      '<p style="margin:0 0 6px"><b>Android</b></p>' +
+      '<p class="muted" style="margin:0">1. Відкрийте сайт у Chrome.<br>2. Зверху справа натисніть три крапки.<br>3. Оберіть «Додати на головний екран» або «Встановити додаток».<br>4. Натисніть «Додати».<br>5. Відкривайте Пульс з іконки на екрані.</p></div>';
   }
   const sideNav = TABS.map(function (item) {
     return '<button class="' + (tab === item.id ? "on" : "") + '" data-tab="' + item.id + '">' + icon(item.icon) + " " + item.label + "</button>";
