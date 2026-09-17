@@ -34,23 +34,31 @@ function decodeEntities(value) {
 function parseTelegramHtml(html) {
   const blocks = html.split("tgme_widget_message_wrap");
   const posts = [];
+  const postRe = new RegExp('data-post="([^/]+)/(\\d+)"');
+  const timeRe = new RegExp('datetime="([^"]+)"');
   for (const block of blocks) {
-    const post = block.match(/data-post="([^/]+)\/(\d+)"/);
+    const post = block.match(postRe);
     if (!post) continue;
     const username = post[1];
     const telegramId = post[2];
     const source = BY_USER[username.toLowerCase()];
     if (!source) continue;
-    const textMatch = block.match(/tgme_widget_message_text[^>]*>([\s\S]*?)<\/div>/);
-    const timeMatch = block.match(/datetime="([^"]+)"/);
-    const text = decodeEntities(textMatch?.[1] ?? "");
+    const marker = "tgme_widget_message_text";
+    const i = block.indexOf(marker);
+    let text = "";
+    if (i >= 0) {
+      const start = block.indexOf(">", i);
+      const end = block.indexOf("</div>", start);
+      if (start >= 0 && end > start) text = decodeEntities(block.slice(start + 1, end));
+    }
+    const timeMatch = block.match(timeRe);
     if (!text || !timeMatch) continue;
     posts.push({
-      id: `${username}-${telegramId}`,
+      id: username + "-" + telegramId,
       s: source,
       text,
       t: new Date(timeMatch[1]).getTime(),
-      url: `https://t.me/${username}/${telegramId}`,
+      url: "https://t.me/" + username + "/" + telegramId,
     });
   }
   return posts;
