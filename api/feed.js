@@ -351,17 +351,58 @@ function buildAlert(messages, cityWrap, oblastWrap, ajaxOblast, ajaxCity) {
   };
 }
 
+function kyivDayKey(ts) {
+  return new Date(ts).toLocaleDateString("en-CA", { timeZone: "Europe/Kyiv" });
+}
+
+function formatDuration(ms) {
+  const hours = ms / 3600000;
+  if (hours < 0.05) return "0 год";
+  if (hours < 1) return Math.round(hours * 60) + " хв";
+  return hours.toLocaleString("uk-UA", { maximumFractionDigits: 1 }) + " год";
+}
+
+function computeKyivAlertStats(hist, cityOn) {
+  const alarms = ((((hist || {}).history || [])[0] || {}).alarms) || [];
+  const now = Date.now();
+  const todayKey = kyivDayKey(now);
+  const cutoff = now - 86400000;
+  let todayAlerts = 0;
+  let durationMs = 0;
+  for (const alarm of alarms) {
+    if (String(alarm.alertType || "AIR").toUpperCase() !== "AIR") continue;
+    if (alarm.alertLevel === "Yellow") continue;
+    const start = Date.parse(alarm.startDate || "");
+    if (!Number.isFinite(start)) continue;
+    if (kyivDayKey(start) === todayKey) todayAlerts += 1;
+    let end = Date.parse(alarm.endDate || "");
+    if (!Number.isFinite(end)) {
+      if (cityOn && now - start < 8 * 3600000) end = now;
+      else continue;
+    }
+    const ov0 = Math.max(start, cutoff);
+    const ov1 = Math.min(end, now);
+    if (ov1 > ov0) durationMs += ov1 - ov0;
+  }
+  return {
+    todayAlerts,
+    durationLabel: formatDuration(durationMs),
+    durationHours: Math.round((durationMs / 3600000) * 10) / 10,
+  };
+}
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Cache-Control", "s-maxage=20, stale-while-revalidate=40");
+  res.setHeader("Cache-Control", "s-maxage=10, stale-while-revalidate=20");
   const extras = parseExtras(req);
   const sources = SOURCES.concat(extras);
-  const [lists, cityWrap, oblastWrap, ajaxOblast, ajaxCity] = await Promise.all([
+  const [lists, cityWrap, oblastWrap, ajaxOblast, ajaxCity, kyivHist] = await Promise.all([
     Promise.all(sources.map(scrape)),
     fetchJson("https://alerts.com.ua/api/states/25", 5000),
     fetchJson("https://alerts.com.ua/api/states/9", 5000),
     fetchJson("https://air-save.ops.ajax.systems/api/mobile/status/regions/v2?regions=14", 5000),
     fetchJson("https://air-save.ops.ajax.systems/api/mobile/status/regions/v2?regions=31", 5000),
+    fetchJson("https://my-kiev.com/alerts/api/history/31", 5000),
   ]);
   const seen = new Set();
   const all = lists
@@ -372,12 +413,14 @@ export default async function handler(req, res) {
       return true;
     })
     .sort((a, b) => b.t - a.t);
-  const now = Date.now();
-  const todayKey = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Kyiv" });
-  const isToday = (t) => new Date(t).toLocaleDateString("en-CA", { timeZone: "Europe/Kyiv" }) === todayKey;
+  const cityOn = isFreshOn(cityWrap) || ajaxOnKyiv(ajaxCity);
+  const kyivStats = computeKyivAlertStats(kyivHist, cityOn);
   const stats = {
-    today: all.filter((m) => isToday(m.t)).length,
-    last24h: all.filter((m) => now - m.t < 86400000).length,
+    today: kyivStats.todayAlerts,
+    last24h: kyivStats.durationHours,
+    todayAlerts: kyivStats.todayAlerts,
+    durationLabel: kyivStats.durationLabel,
+    durationHours: kyivStats.durationHours,
     sourceCount: sources.length,
     scraperOk: all.length > 0,
   };
