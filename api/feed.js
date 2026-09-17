@@ -38,20 +38,20 @@ function decodeEntities(v) {
     .trim();
 }
 
-function parseTelegramHtml(html) {
+function parseTelegramHtml(html, source) {
   const blocks = html.split("tgme_widget_message_wrap");
   const posts = [];
   const postRe = new RegExp('data-post="([^"]+)"');
   const timeRe = new RegExp('datetime="([^"]+)"');
+  const want = String(source.user || "").toLowerCase();
   for (const block of blocks) {
     const post = block.match(postRe);
     if (!post) continue;
     const parts = post[1].split("/");
     if (parts.length < 2) continue;
     const username = parts[0];
+    if (username.toLowerCase() !== want) continue;
     const telegramId = parts[1];
-    const source = BY_USER[username.toLowerCase()];
-    if (!source) continue;
     const marker = "tgme_widget_message_text";
     const i = block.indexOf(marker);
     let text = "";
@@ -73,16 +73,66 @@ function parseTelegramHtml(html) {
   return posts;
 }
 
-async function scrape(user) {
+function extractTitle(html) {
+  const m = String(html || "").match(/property="og:title" content="([^"]+)"/);
+  if (!m) return "";
+  return decodeEntities(m[1]).replace(/\s*[—–-]\s*Telegram\s*$/i, "").trim();
+}
+
+function normalizeUser(raw) {
+  let v = String(raw || "").trim();
+  v = v.replace(/^https?:\/\//i, "");
+  v = v.replace(/^(t\.me|telegram\.me|www\.t\.me)\//i, "");
+  v = v.replace(/^s\//i, "");
+  v = v.replace(/^@/, "");
+  v = (v.split(/[/?#\s]/)[0] || "");
+  if (!/^[A-Za-z][A-Za-z0-9_]{3,31}$/.test(v)) return "";
+  if (/^(joinchat|addstickers|socks|proxy)$/i.test(v)) return "";
+  return v;
+}
+
+function extraSource(user) {
+  return {
+    id: "x-" + user.toLowerCase(),
+    title: user,
+    user: user,
+    cat: "Тривога",
+    initials: user.slice(0, 2).toUpperCase(),
+    custom: true,
+  };
+}
+
+function parseExtras(req) {
+  const q = req && req.query ? String(req.query.extra || "") : "";
+  const seen = new Set();
+  const out = [];
+  for (const part of q.split(/[,]+/)) {
+    const user = normalizeUser(part);
+    if (!user) continue;
+    const key = user.toLowerCase();
+    if (seen.has(key) || BY_USER[key]) continue;
+    seen.add(key);
+    out.push(extraSource(user));
+    if (out.length >= 15) break;
+  }
+  return out;
+}
+
+async function scrape(source) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
   try {
-    const res = await fetch("https://t.me/s/" + user, {
+    const res = await fetch("https://t.me/s/" + source.user, {
       signal: controller.signal,
       headers: { "User-Agent": "Mozilla/5.0 (compatible; KyivPulse/1.0)", Accept: "text/html" },
     });
     if (!res.ok) return [];
-    return parseTelegramHtml(await res.text());
+    const html = await res.text();
+    const title = extractTitle(html);
+    const src = title
+      ? Object.assign({}, source, { title: title, initials: title.replace(/^@/, "").slice(0, 2).toUpperCase() })
+      : source;
+    return parseTelegramHtml(html, src);
   } catch (e) {
     return [];
   } finally {
@@ -249,8 +299,10 @@ function buildAlert(messages, cityWrap, oblastWrap, ajaxOblast, ajaxCity) {
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Cache-Control", "s-maxage=20, stale-while-revalidate=40");
+  const extras = parseExtras(req);
+  const sources = SOURCES.concat(extras);
   const [lists, cityWrap, oblastWrap, ajaxOblast, ajaxCity] = await Promise.all([
-    Promise.all(SOURCES.map((s) => scrape(s.user))),
+    Promise.all(sources.map(scrape)),
     fetchJson("https://alerts.com.ua/api/states/25", 5000),
     fetchJson("https://alerts.com.ua/api/states/9", 5000),
     fetchJson("https://air-save.ops.ajax.systems/api/mobile/status/regions/v2?regions=14", 5000),
@@ -271,7 +323,7 @@ export default async function handler(req, res) {
   const stats = {
     today: all.filter((m) => isToday(m.t)).length,
     last24h: all.filter((m) => now - m.t < 86400000).length,
-    sourceCount: SOURCES.length,
+    sourceCount: sources.length,
     scraperOk: all.length > 0,
   };
   const messages = all.slice(0, 60);
