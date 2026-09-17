@@ -12,7 +12,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png"/>
 <link rel="apple-touch-icon" href="/apple-touch-icon.png"/>
 <title>Пульс Києва</title>
-<!-- pulse-chrome-v5-bucha-sound-20260917 -->
+<!-- pulse-chrome-v6-custom-sources-20260917 -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap"/>
 <style>
 :root {
@@ -121,6 +121,20 @@ button:not(:disabled) { cursor: pointer; }
 .siren-detail { margin: 8px 2px 0; font-size: 12px; color: var(--quiet); }
 .muted { color: var(--quiet); font-size: 13px; line-height: 1.5; }
 .card { background: var(--panel); border: 1px solid var(--hair); border-radius: 16px; padding: 14px 16px; margin-bottom: 12px; }
+.add-row { display: flex; gap: 8px; margin-bottom: 12px; }
+.add-row input {
+  flex: 1; min-width: 0; background: var(--raised); border: 1px solid var(--hair);
+  color: var(--ink); border-radius: 12px; padding: 12px 14px; outline: none;
+}
+.add-row button {
+  border: 0; border-radius: 12px; padding: 0 16px; flex-shrink: 0;
+  background: var(--signal); color: #09110e; font-weight: 650;
+}
+.add-row button:disabled { opacity: .45; }
+.rm {
+  margin-left: auto; border: 0; background: transparent; color: var(--quiet);
+  font-size: 12px; padding: 6px 8px; flex-shrink: 0;
+}
 .who { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .ava {
   width: 36px; height: 36px; border-radius: 12px; background: var(--raised);
@@ -213,10 +227,51 @@ function ago(ts) {
   return Math.floor(min / 60) + " год";
 }
 let tab = "home", q = "", cat = "Усі", messages = [];
+let extraDraft = "", extraError = "", extraBusy = false;
 let alertStatus = { level: "clear", title: "Немає тривоги", where: "Київ", detail: "перевіряємо…" };
 let feedStats = { today: 0, last24h: 0, sourceCount: 9, scraperOk: false };
 function pulseMark() {
   return '<svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#191b20"/><path d="M3.5 17.5H9.1L12.15 7.4 16.7 25.6 20.1 17.5H28.5" fill="none" stroke="#7dcfb6" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+}
+function normalizeUser(raw) {
+  let v = String(raw || "").trim();
+  v = v.replace(/^https?:\/\//i, "");
+  v = v.replace(/^(t\.me|telegram\.me|www\.t\.me)\//i, "");
+  v = v.replace(/^s\//i, "");
+  v = v.replace(/^@/, "");
+  v = (v.split(/[/?#\s]/)[0] || "");
+  if (!/^[A-Za-z][A-Za-z0-9_]{3,31}$/.test(v)) return "";
+  if (/^(joinchat|addstickers|socks|proxy)$/i.test(v)) return "";
+  return v;
+}
+function readExtras() {
+  try {
+    const raw = JSON.parse(localStorage.getItem("pulse-extra") || "[]");
+    if (!Array.isArray(raw)) return [];
+    return raw.map(function (item) {
+      const user = normalizeUser(item && item.user ? item.user : item);
+      if (!user) return null;
+      const title = (item && item.title) || user;
+      return {
+        id: "x-" + user.toLowerCase(),
+        title: title,
+        user: user,
+        cat: "Тривога",
+        initials: String(title).replace(/^@/, "").slice(0, 2).toUpperCase(),
+        custom: true,
+      };
+    }).filter(Boolean);
+  } catch (e) {
+    return [];
+  }
+}
+function saveExtras(list) {
+  localStorage.setItem("pulse-extra", JSON.stringify(list.map(function (s) {
+    return { user: s.user, title: s.title || s.user };
+  })));
+}
+function allSources() {
+  return SOURCES.concat(readExtras());
 }
 function liveBadge() {
   return '<div class="live"><span class="live-dot"></span> Наживо</div>';
@@ -229,7 +284,7 @@ function statsGrid() {
   return '<dl class="stats">' +
     box("Сьогодні", s.today || messages.length) +
     box("За добу", s.last24h || messages.length) +
-    box("Джерела", s.sourceCount || SOURCES.length) +
+    box("Джерела", s.sourceCount || allSources().length) +
     box("Telegram", s.scraperOk ? "мережа" : (messages.length ? "мережа" : "резерв"), !s.scraperOk && !messages.length) +
     "</dl>";
 }
@@ -368,9 +423,12 @@ function render() {
   } else if (tab === "feed") {
     main = list.map(card).join("") || '<p class="muted">Чекаємо пости…</p>';
   } else if (tab === "sources") {
-    main = SOURCES.map(function (s) {
-      return '<div class="card"><div class="who"><div class="ava">' + s.initials + '</div><div><b>' + s.title + '</b><br><small class="muted">@' + s.user + "</small></div></div></div>";
-    }).join("");
+    main = '<form id="add-source" class="add-row"><input id="extra-q" placeholder="@канал або t.me/канал" autocomplete="off"/><button type="submit" ' + (extraBusy ? "disabled" : "") + ">" + (extraBusy ? "…" : "Додати") + "</button></form>" +
+      (extraError ? '<p class="muted" style="color:var(--danger);margin:0 2px 12px">' + extraError + "</p>" : '<p class="muted" style="margin:0 2px 12px">Вставте публічний Telegram-канал. Він з’явиться в стрічці. Сирену не вмикає.</p>') +
+      allSources().map(function (s) {
+        const rm = s.custom ? '<button class="rm" data-rm="' + s.user + '">Прибрати</button>' : "";
+        return '<div class="card"><div class="who"><div class="ava">' + s.initials + '</div><div><b>' + s.title + '</b><br><small class="muted">@' + s.user + (s.custom ? " · додано" : "") + "</small></div>" + rm + "</div></div>";
+      }).join("");
   } else if (tab === "search") {
     main = list.length ? list.map(card).join("") : '<p class="muted">Нічого не знайдено.</p>';
   } else {
@@ -388,7 +446,7 @@ function render() {
     return '<button class="' + (tab === item.id ? "on" : "") + '" data-tab="' + item.id + '">' + icon(item.icon) + "<span>" + item.label + "</span></button>";
   }).join("");
   document.getElementById("root").innerHTML =
-    '<div class="app"><aside class="side"><div class="brand">' + pulseMark() + '<div><b>Пульс Києва</b><br><small class="muted">Цивільний моніторинг</small></div></div><nav class="nav">' + sideNav + '</nav></aside><div class="col"><header class="top"><div class="top-brand">' + pulseMark() + '<div><h2>Пульс</h2><p class="muted" style="margin:2px 0 0">' + titles.title + ' · ' + messages.length + ' повідомлень</p></div></div><div class="search"><input id="q" placeholder="Пошук у стрічці"/></div></header><div class="body"><section class="main">' + main + '</section><aside class="rail"><div class="kicker">Сьогодні</div><p style="font-size:36px;margin:4px 0">' + messages.length + "</p>" + CATS.map(function (c) { return '<button data-cat="' + c + '" class="' + (c === cat ? "on" : "") + '" style="margin:4px 4px 0 0;border:0;border-radius:999px;padding:6px 10px;background:' + (c === cat ? "var(--ink)" : "var(--raised)") + ';color:' + (c === cat ? "var(--canvas)" : "var(--quiet)") + '">' + c + "</button>"; }).join("") + SOURCES.map(function (s) { return '<p>' + s.title + '<br><small class="muted">@' + s.user + "</small></p>"; }).join("") + '</aside></div></div></div><nav class="dock" aria-label="Розділи">' + dock + "</nav>";
+    '<div class="app"><aside class="side"><div class="brand">' + pulseMark() + '<div><b>Пульс Києва</b><br><small class="muted">Цивільний моніторинг</small></div></div><nav class="nav">' + sideNav + '</nav></aside><div class="col"><header class="top"><div class="top-brand">' + pulseMark() + '<div><h2>Пульс</h2><p class="muted" style="margin:2px 0 0">' + titles.title + ' · ' + messages.length + ' повідомлень</p></div></div><div class="search"><input id="q" placeholder="Пошук у стрічці"/></div></header><div class="body"><section class="main">' + main + '</section><aside class="rail"><div class="kicker">Сьогодні</div><p style="font-size:36px;margin:4px 0">' + messages.length + "</p>" + CATS.map(function (c) { return '<button data-cat="' + c + '" class="' + (c === cat ? "on" : "") + '" style="margin:4px 4px 0 0;border:0;border-radius:999px;padding:6px 10px;background:' + (c === cat ? "var(--ink)" : "var(--raised)") + ';color:' + (c === cat ? "var(--canvas)" : "var(--quiet)") + '">' + c + "</button>"; }).join("") + allSources().map(function (s) { return '<p>' + s.title + '<br><small class="muted">@' + s.user + "</small></p>"; }).join("") + '</aside></div></div></div><nav class="dock" aria-label="Розділи">' + dock + "</nav>";
   document.querySelectorAll("[data-tab]").forEach(function (b) {
     b.onclick = function () { tab = b.getAttribute("data-tab"); render(); };
   });
@@ -417,6 +475,21 @@ function render() {
   if (soundHome) {
     soundHome.onclick = function () { setSound(true); };
   }
+  const extraInp = document.getElementById("extra-q");
+  if (extraInp) {
+    extraInp.value = extraDraft;
+    extraInp.oninput = function (e) { extraDraft = e.target.value; extraError = ""; };
+  }
+  const addForm = document.getElementById("add-source");
+  if (addForm) {
+    addForm.onsubmit = function (e) {
+      e.preventDefault();
+      addExtraSource(extraInp ? extraInp.value : extraDraft);
+    };
+  }
+  document.querySelectorAll("[data-rm]").forEach(function (b) {
+    b.onclick = function () { removeExtraSource(b.getAttribute("data-rm")); };
+  });
 }
 let savedScroll = 0;
 const ptr = { y0: 0, pulling: false, armed: false, busy: false, dist: 0 };
@@ -470,13 +543,63 @@ async function refresh() {
   ptr.busy = false;
   showPtr(0, "");
 }
+async function addExtraSource(raw) {
+  const user = normalizeUser(raw);
+  if (!user) {
+    extraError = "Вкажіть @канал або посилання t.me/…";
+    render();
+    return;
+  }
+  const have = allSources();
+  if (have.some(function (s) { return s.user.toLowerCase() === user.toLowerCase(); })) {
+    extraError = "@" + user + " уже в списку";
+    render();
+    return;
+  }
+  const extras = readExtras();
+  if (extras.length >= 15) {
+    extraError = "Можна додати ще до 15 каналів";
+    render();
+    return;
+  }
+  extraBusy = true;
+  extraError = "";
+  render();
+  extras.push({ user: user, title: user });
+  saveExtras(extras);
+  extraDraft = "";
+  extraBusy = false;
+  tab = "sources";
+  render();
+  await loadFeed();
+}
+function removeExtraSource(user) {
+  saveExtras(readExtras().filter(function (s) { return s.user.toLowerCase() !== String(user || "").toLowerCase(); }));
+  extraError = "";
+  render();
+  loadFeed();
+}
 async function loadFeed() {
   try {
-    const data = await (await fetch("/api/feed", { cache: "no-store" })).json();
+    const extras = readExtras().map(function (s) { return s.user; }).join(",");
+    const url = extras ? "/api/feed?extra=" + encodeURIComponent(extras) : "/api/feed";
+    const data = await (await fetch(url, { cache: "no-store" })).json();
     if (data.ok) {
       if (data.messages && data.messages.length) messages = data.messages;
       if (data.alert) alertStatus = data.alert;
       if (data.stats) feedStats = data.stats;
+      const stored = readExtras();
+      let changed = false;
+      stored.forEach(function (item) {
+        const hit = (data.messages || []).find(function (m) {
+          return m.s && m.s.user && m.s.user.toLowerCase() === item.user.toLowerCase();
+        });
+        if (hit && hit.s.title && hit.s.title !== item.title) {
+          item.title = hit.s.title;
+          changed = true;
+        }
+      });
+      if (changed) saveExtras(stored);
       if (bootDone) {
         const buchaAlert = alertStatus.level === "red" && alertStatus.bucha;
         if (buchaAlert && lastAlertLevel !== "bucha-red") {
