@@ -129,6 +129,11 @@ button:not(:disabled) { cursor: pointer; }
 .siren.clear { color: var(--signal); background: rgb(125 207 182 / .1); border-color: rgb(125 207 182 / .28); }
 .siren .where { text-transform: none; letter-spacing: 0; font-weight: 600; opacity: .95; }
 .siren-detail { margin: 8px 2px 0; font-size: 12px; color: var(--quiet); }
+.care {
+  margin: 10px 0 0; padding: 12px 14px; border-radius: 12px;
+  background: rgb(125 207 182 / .12); border: 1px solid rgb(125 207 182 / .28);
+  color: var(--ink); font-size: 15px; font-weight: 650; line-height: 1.35;
+}
 .muted { color: var(--quiet); font-size: 13px; line-height: 1.5; }
 .card { background: var(--panel); border: 1px solid var(--hair); border-radius: 16px; padding: 14px 16px; margin-bottom: 12px; }
 .add-row { display: flex; gap: 8px; margin-bottom: 12px; }
@@ -581,13 +586,21 @@ async function setPush(on) {
   }
   render();
 }
+function shelterLine(kind) {
+  if (kind === "ballistic") return "Балістика. Ти найкращий, якщо вже в укритті.";
+  if (kind === "mig31") return "Виліт МіГ-31. Ти найкращий, якщо вже в укритті.";
+  return "Ти найкращий, якщо в укритті.";
+}
 function sirenBlock() {
   const testing = Date.now() < testBoostUntil;
   const a = testing
-    ? { level: "red", title: "ТЕСТ", where: "перевірка сигналу", detail: "Це не справжня тривога. Сирена 10 секунд." }
+    ? { level: "red", title: "ТЕСТ", where: "перевірка сигналу", detail: "Це не справжня тривога. Сирена 10 секунд.", kind: "test" }
     : (alertStatus || {});
   const level = a.level === "red" || a.level === "yellow" ? a.level : "clear";
-  return '<div class="siren ' + level + '"><span class="pulse"></span><span>' + (a.title || "Статус") + '</span><span class="where">· ' + (a.where || "Київ") + '</span></div><p class="siren-detail">' + (a.detail || "") + "</p>";
+  const care = !testing && level === "red"
+    ? '<p class="care">' + shelterLine(a.kind) + "</p>"
+    : "";
+  return '<div class="siren ' + level + '"><span class="pulse"></span><span>' + (a.title || "Статус") + '</span><span class="where">· ' + (a.where || "Київ") + '</span></div><p class="siren-detail">' + (a.detail || "") + "</p>" + care;
 }
 function card(m) {
   return '<article class="card"><div class="who"><div class="ava">' + m.s.initials + '</div><div><b>' + m.s.title + '</b><br><small class="muted">' + ago(m.t) + ' · ' + m.s.cat + '</small></div></div><p>' + m.text + '</p><p class="muted"><a href="' + (m.url || ("https://t.me/" + m.s.user)) + '" target="_blank" rel="noreferrer">Відкрити в Telegram</a></p></article>';
@@ -821,7 +834,7 @@ async function loadFeed() {
         const sirenKey = sirenOn ? (alertStatus.kind || "air") + ":" + (alertStatus.where || "") + ":" + (alertStatus.since || 0) : "off";
         if (sirenOn && lastAlertLevel !== sirenKey) {
           if (soundOn() || urgentKind) playOfficialSiren();
-          notifyUser(alertStatus.title + " · " + alertStatus.where, alertStatus.detail, "pulse-alert");
+          notifyUser(alertStatus.title + " · " + alertStatus.where, shelterLine(alertStatus.kind), "pulse-alert");
         } else if (!sirenOn && Date.now() >= testBoostUntil) {
           stopSiren();
         }
