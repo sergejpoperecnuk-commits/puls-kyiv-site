@@ -12,7 +12,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png"/>
 <link rel="apple-touch-icon" href="/apple-touch-icon.png"/>
 <title>Пульс Києва</title>
-<!-- pulse-chrome-v8-ballistic-mig-4s-20260917 -->
+<!-- pulse-chrome-v9-kyiv-alert-stats-20260917 -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap"/>
 <style>
 :root {
@@ -94,7 +94,7 @@ button:not(:disabled) { cursor: pointer; }
 }
 .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
 .stat { background: var(--raised); border-radius: 10px; padding: 10px 12px; margin: 0; }
-.stat dt { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); font-weight: 600; }
+.stat dt { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); font-weight: 600; line-height: 1.25; }
 .stat dd { margin: 6px 0 0; font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 .stat.quiet dd { color: var(--quiet); }
 .toggle {
@@ -229,7 +229,7 @@ function ago(ts) {
 let tab = "home", q = "", cat = "Усі", messages = [];
 let extraDraft = "", extraError = "", extraBusy = false;
 let alertStatus = { level: "clear", title: "Немає тривоги", where: "Київ", detail: "перевіряємо…" };
-let feedStats = { today: 0, last24h: 0, sourceCount: 9, scraperOk: false };
+let feedStats = { today: 0, last24h: 0, sourceCount: 9, scraperOk: false, todayAlerts: 0, durationLabel: "0 год" };
 function pulseMark() {
   return '<svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#191b20"/><path d="M3.5 17.5H9.1L12.15 7.4 16.7 25.6 20.1 17.5H28.5" fill="none" stroke="#7dcfb6" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 }
@@ -281,11 +281,13 @@ function statsGrid() {
   function box(label, value, quiet) {
     return '<div class="stat' + (quiet ? " quiet" : "") + '"><dt>' + label + "</dt><dd>" + value + "</dd></div>";
   }
+  const today = s.todayAlerts != null ? s.todayAlerts : (s.today != null ? s.today : "—");
+  const duration = s.durationLabel || "—";
   return '<dl class="stats">' +
-    box("Сьогодні", s.today || messages.length) +
-    box("За добу", s.last24h || messages.length) +
+    box("Сьогодні", today) +
+    box("За добу", duration) +
     box("Джерела", s.sourceCount || allSources().length) +
-    box("Telegram", s.scraperOk ? "мережа" : (messages.length ? "мережа" : "резерв"), !s.scraperOk && !messages.length) +
+    box("Цивільне оповіщення", "Telegram") +
     "</dl>";
 }
 function heroBlock() {
@@ -439,7 +441,7 @@ function render() {
       '<p class="muted" style="margin:10px 2px 16px">' + (soundOn() ? "Увімкнено: сирена для Бучанського району." : "Вимкнено.") + "</p>" +
       '<button class="toggle' + (pushOn() ? " on" : "") + '" id="push-toggle"><span>Пуш-повідомлення</span><span class="switch"><i></i></span></button>' +
       '<p class="muted" id="push-status" style="margin:10px 2px 0">' + pushStatusText() + "</p>" +
-      '<div class="card" style="margin-top:16px"><p class="muted" style="margin:0">Оновлення з публічних Telegram-каналів кожні 25 с. Свайп зверху вниз — оновити зараз.</p></div>' +
+      '<div class="card" style="margin-top:16px"><p class="muted" style="margin:0">Оновлення з публічних Telegram-каналів кожні 15 с. Свайп зверху вниз — оновити зараз.</p></div>' +
       '<div class="card" style="margin-top:12px"><p style="margin:0 0 8px"><b>Приватність</b></p><p class="muted" style="margin:0">Ця програма не використовує геодані, не запитує місцезнаходження і не відстежує пристрій. Налаштування зберігаються лише на вашому телефоні.</p></div>';
   }
   const sideNav = TABS.map(function (item) {
@@ -625,7 +627,7 @@ async function loadFeed() {
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js").catch(function () {});
 }
-setInterval(loadFeed, 25000);
+setInterval(loadFeed, 15000);
 document.addEventListener("pointerdown", unlockAudio, { once: true });
 document.addEventListener("touchstart", unlockAudio, { once: true });
 render();
