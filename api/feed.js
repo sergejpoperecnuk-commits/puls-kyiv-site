@@ -352,8 +352,8 @@ function urgentAlert(urgent, buchaOn) {
   return {
     level: "red",
     title: "Тривога",
-    where: ballistic ? "Балістика" : "МіГ-31",
-    detail: (ballistic ? "загроза балістики · з " : "виліт МіГ-31 · з ") + formatSince(urgent.since),
+    where: ballistic ? "Балістика · усі райони" : "МіГ-31 · усі райони",
+    detail: (ballistic ? "загроза балістики · сирена всім · з " : "виліт МіГ-31 · сирена всім · з ") + formatSince(urgent.since),
     since: urgent.since,
     source: "monitor",
     bucha: buchaOn,
