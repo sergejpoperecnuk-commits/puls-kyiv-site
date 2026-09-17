@@ -8,9 +8,10 @@ const SOURCES = [
   { id: "ka", title: "Київ Моніторинг", user: "KyivAlarm", cat: "Тривога", initials: "КА" },
   { id: "va", title: "КМВА", user: "VA_Kyiv", cat: "Офіційне", initials: "ВА" },
   { id: "od", title: "Київська ОВА", user: "kyivoda", cat: "Офіційне", initials: "ОД" },
+  { id: "ps", title: "Повітряні Сили", user: "kpszsu", cat: "Офіційне", initials: "ПС" },
 ];
 const BY_USER = Object.fromEntries(SOURCES.map((s) => [s.user.toLowerCase(), s]));
-const OFFICIAL_USERS = new Set(["va_kyiv", "kyivoda"]);
+const OFFICIAL_USERS = new Set(["va_kyiv", "kyivoda", "kpszsu"]);
 const NBSP = "\u0026nbsp;";
 const AMP = "\u0026amp;";
 const DISTRICTS = [
