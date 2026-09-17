@@ -15,7 +15,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png"/>
 <link rel="apple-touch-icon" href="/apple-touch-icon.png"/>
 <title>Пульс Києва</title>
-<!-- pulse-chrome-v14-ios-dock-fill-20260918 -->
+<!-- pulse-chrome-v15-kyiv-motherland-20260918 -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap"/>
 <style>
 :root {
@@ -106,7 +106,9 @@ button:not(:disabled) { cursor: pointer; }
 .main { overflow: auto; padding: 20px 16px 24px; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch; }
 .rail { border-left: 1px solid var(--hair); overflow: auto; padding: 22px 18px; background: var(--panel); }
 .hero { background: var(--panel); border: 1px solid var(--hair); border-radius: 16px; padding: 16px; margin-bottom: 18px; }
-.hero h3 { margin: 6px 0 0; font-size: 17px; }
+.hero h3 { margin: 0; font-size: 17px; }
+.city-head { display: flex; align-items: center; gap: 8px; margin: 6px 0 0; }
+.motherland { width: 20px; height: 26px; color: var(--signal); flex-shrink: 0; }
 .hero-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .live {
   display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
@@ -285,6 +287,9 @@ const WATCH_AREAS = [
 function pulseMark() {
   return '<svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#191b20"/><path d="M3.5 17.5H9.1L12.15 7.4 16.7 25.6 20.1 17.5H28.5" fill="none" stroke="#7dcfb6" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 }
+function motherlandMark() {
+  return '<svg class="motherland" viewBox="0 0 36 48" fill="currentColor" aria-hidden="true"><path d="M25.15 1.1h1.7v15.4h-1.7z"/><path d="M23.1 16h5.8v1.55h-5.8z"/><path d="M20.1 19.3 25.5 16.4l1.25 2-5.5 3.1z"/><circle cx="17.3" cy="13.2" r="3.15"/><path d="M14.4 11.2c.85-1.55 4.9-1.55 5.75 0" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/><path d="M14.05 17.6h6.7l3.55 24.5H10.45z"/><path d="M3.9 20.6c.15-3.4 5.7-4.2 6.4-1.1 1.15 4.7.15 9.5-1.7 9.7-2.35.25-4.85-4.6-4.7-8.6z"/><rect x="9.3" y="42.1" width="16.3" height="2.5" rx=".45"/><rect x="7.3" y="44.6" width="20.3" height="2.5" rx=".45"/></svg>';
+}
 function normalizeUser(raw) {
   let v = String(raw || "").trim();
   v = v.replace(/^https?:\/\//i, "");
@@ -345,7 +350,7 @@ function statsGrid() {
 function heroBlock() {
   const latest = messages[0];
   const lastLine = latest ? ("Останнє · " + ago(latest.t) + " · " + latest.s.title) : "Відкриті Telegram-канали зі списку джерел";
-  return '<div class="hero"><div class="hero-top"><div><div class="kicker">Огляд</div><h3>Наживо по Києву</h3><p class="muted" style="margin:6px 0 0">' + lastLine + "</p></div>" + liveBadge() + "</div>" + sirenBlock() + statsGrid() + "</div>";
+  return '<div class="hero"><div class="hero-top"><div><div class="kicker">Огляд</div><div class="city-head">' + motherlandMark() + "<h3>Київ</h3></div><p class=\"muted\" style=\"margin:6px 0 0\">" + lastLine + "</p></div>" + liveBadge() + "</div>" + sirenBlock() + statsGrid() + "</div>";
 }
 function pushOn() {
   return localStorage.getItem("pulse-push") === "1" && typeof Notification !== "undefined" && Notification.permission === "granted";
