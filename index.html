@@ -12,7 +12,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png"/>
 <link rel="apple-touch-icon" href="/apple-touch-icon.png"/>
 <title>Пульс Києва</title>
-<!-- pulse-chrome-v6-custom-sources-20260917 -->
+<!-- pulse-chrome-v7-privacy-note-20260917 -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap"/>
 <style>
 :root {
@@ -437,7 +437,8 @@ function render() {
       '<p class="muted" style="margin:10px 2px 16px">' + (soundOn() ? "Увімкнено: сирена для Бучанського району." : "Вимкнено.") + "</p>" +
       '<button class="toggle' + (pushOn() ? " on" : "") + '" id="push-toggle"><span>Пуш-повідомлення</span><span class="switch"><i></i></span></button>' +
       '<p class="muted" id="push-status" style="margin:10px 2px 0">' + pushStatusText() + "</p>" +
-      '<div class="card" style="margin-top:16px"><p class="muted" style="margin:0">Оновлення з публічних Telegram-каналів кожні 25 с. Свайп зверху вниз — оновити зараз.</p></div>';
+      '<div class="card" style="margin-top:16px"><p class="muted" style="margin:0">Оновлення з публічних Telegram-каналів кожні 25 с. Свайп зверху вниз — оновити зараз.</p></div>' +
+      '<div class="card" style="margin-top:12px"><p style="margin:0 0 8px"><b>Приватність</b></p><p class="muted" style="margin:0">Ця програма не використовує геодані, не запитує місцезнаходження і не відстежує пристрій. Налаштування зберігаються лише на вашому телефоні.</p></div>';
   }
   const sideNav = TABS.map(function (item) {
     return '<button class="' + (tab === item.id ? "on" : "") + '" data-tab="' + item.id + '">' + icon(item.icon) + " " + item.label + "</button>";
