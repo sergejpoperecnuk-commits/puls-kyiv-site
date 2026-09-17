@@ -231,6 +231,37 @@ function ajaxLevel(ajax, ids) {
   return yellow ? "yellow" : "";
 }
 
+function parseAin(data) {
+  const alerts = data && Array.isArray(data.alerts) ? data.alerts : null;
+  const out = {
+    ok: Boolean(alerts),
+    buchaRed: false,
+    buchaYellow: false,
+    cityRed: false,
+    cityYellow: false,
+  };
+  if (!alerts) return out;
+  for (const a of alerts) {
+    if (a.f) continue;
+    const at = a.at;
+    if (at === 1 || at === 2 || at === 90) continue;
+    const uid = Number(a.luid);
+    const raion = Number(a.lruid);
+    const yellow = Number(a.al) === 1;
+    const bucha = uid === 75 || uid === 14 || raion === 75;
+    const city = uid === 31;
+    if (bucha) {
+      if (yellow) out.buchaYellow = true;
+      else out.buchaRed = true;
+    }
+    if (city) {
+      if (yellow) out.cityYellow = true;
+      else out.cityRed = true;
+    }
+  }
+  return out;
+}
+
 function mentionsBucha(text) {
   const t = String(text || "").toLowerCase();
   return /бучанськ|\bбуча\b|\bбучі\b|ірпін|гостом|бородян|макарів|ворзел|коцюбинськ|немшаїв|пісківк/.test(t);
@@ -295,10 +326,10 @@ function urgentAlert(urgent, buchaOn) {
   };
 }
 
-function buildAlert(messages, cityWrap, oblastWrap, ajaxOblast, ajaxCity) {
-  const cityOn = isFreshOn(cityWrap) || ajaxLevel(ajaxCity, [31]) === "red";
+function buildAlert(messages, cityWrap, oblastWrap, ajaxOblast, ajaxCity, ainData) {
+  const ain = parseAin(ainData);
   const buchaAjax = ajaxLevel(ajaxOblast, [75, 14]);
-  const oblastOn = isFreshOn(oblastWrap);
+  const cityAjax = ajaxLevel(ajaxCity, [31]);
   const mapOk = Boolean(cityWrap && cityWrap.state);
   const ajaxOk = Boolean(
     (ajaxOblast && Array.isArray(ajaxOblast.alarms)) ||
@@ -322,17 +353,23 @@ function buildAlert(messages, cityWrap, oblastWrap, ajaxOblast, ajaxCity) {
     }
   }
 
-  const buchaOn = oblastOn || buchaAjax === "red" || lastBuchaRed > lastBuchaClear;
+  const buchaOn = ain.ok
+    ? ain.buchaRed
+    : isFreshOn(oblastWrap) || buchaAjax === "red" || lastBuchaRed > lastBuchaClear;
+  const buchaYellow = ain.ok ? ain.buchaYellow : buchaAjax === "yellow";
+  const cityOn = ain.ok
+    ? ain.cityRed
+    : isFreshOn(cityWrap) || cityAjax === "red";
   const urgent = findUrgent(messages);
   if (urgent) return urgentAlert(urgent, buchaOn);
 
   if (buchaOn) {
-    const since = stamp(oblastWrap) || lastBuchaRed || Date.now();
+    const since = lastBuchaRed || stamp(oblastWrap) || Date.now();
     return {
       level: "red",
       title: "Тривога",
       where: cityOn ? "Київ і Бучанський район" : "Бучанський район",
-      detail: "офіційно · Бучанський район · з " + formatSince(since),
+      detail: "alerts.in.ua · Бучанський район · з " + formatSince(since),
       since: since || Date.now(),
       source: "official",
       bucha: true,
@@ -341,12 +378,12 @@ function buildAlert(messages, cityWrap, oblastWrap, ajaxOblast, ajaxCity) {
     };
   }
 
-  if (buchaAjax === "yellow") {
+  if (buchaYellow) {
     return {
       level: "yellow",
       title: "Загроза",
       where: "Бучанський район",
-      detail: "офіційно · жовтий рівень · Бучанський район",
+      detail: "alerts.in.ua · жовтий рівень · Бучанський район",
       since: Date.now(),
       source: "official",
       bucha: false,
@@ -361,7 +398,7 @@ function buildAlert(messages, cityWrap, oblastWrap, ajaxOblast, ajaxCity) {
       level: "red",
       title: "Тривога",
       where: "Київ",
-      detail: "офіційно · Київ · без сирени в Бучі · з " + formatSince(since),
+      detail: "alerts.in.ua · Київ · без сирени в Бучі · з " + formatSince(since),
       since: since || Date.now(),
       source: "official",
       bucha: false,
@@ -370,13 +407,13 @@ function buildAlert(messages, cityWrap, oblastWrap, ajaxOblast, ajaxCity) {
     };
   }
 
-  if (mapOk || ajaxOk || lastBuchaClear || lastClear) {
-    const since = stamp(oblastWrap) || lastBuchaClear || stamp(cityWrap) || lastClear || Date.now();
+  if (ain.ok || mapOk || ajaxOk || lastBuchaClear || lastClear) {
+    const since = lastBuchaClear || stamp(cityWrap) || Date.now();
     return {
       level: "clear",
       title: "Немає тривоги",
       where: "Бучанський район",
-      detail: "офіційно · Бучанський район · відбій · " + formatSince(since),
+      detail: "alerts.in.ua · Бучанський район · відбій · " + formatSince(since),
       since,
       source: "official",
       bucha: false,
@@ -389,7 +426,7 @@ function buildAlert(messages, cityWrap, oblastWrap, ajaxOblast, ajaxCity) {
     level: "clear",
     title: "Немає тривоги",
     where: "Бучанський район",
-    detail: "офіційні джерела · сирени в Бучанському районі немає",
+    detail: "alerts.in.ua · сирени в Бучанському районі немає",
     since: Date.now(),
     source: "official",
     bucha: false,
@@ -443,13 +480,14 @@ export default async function handler(req, res) {
   res.setHeader("Cache-Control", "s-maxage=10, stale-while-revalidate=20");
   const extras = parseExtras(req);
   const sources = SOURCES.concat(extras);
-  const [lists, cityWrap, oblastWrap, ajaxOblast, ajaxCity, kyivHist] = await Promise.all([
+  const [lists, cityWrap, oblastWrap, ajaxOblast, ajaxCity, kyivHist, ainData] = await Promise.all([
     Promise.all(sources.map(scrape)),
     fetchJson("https://alerts.com.ua/api/states/25", 5000),
     fetchJson("https://alerts.com.ua/api/states/9", 5000),
     fetchJson("https://air-save.ops.ajax.systems/api/mobile/status/regions/v2?regions=14,75", 5000),
     fetchJson("https://air-save.ops.ajax.systems/api/mobile/status/regions/v2?regions=31", 5000),
     fetchJson("https://my-kiev.com/alerts/api/history/31", 5000),
+    fetchJson("https://api.alerts.in.ua/v3/alerts/active.json", 5000),
   ]);
   const seen = new Set();
   const all = lists
@@ -485,6 +523,6 @@ export default async function handler(req, res) {
     const rest = all.filter((m) => !seenPin.has(m.id));
     messages.splice(0, messages.length, ...pinned.concat(rest).slice(0, 80));
   }
-  const alert = buildAlert(messages, cityWrap, oblastWrap, ajaxOblast, ajaxCity);
+  const alert = buildAlert(messages, cityWrap, oblastWrap, ajaxOblast, ajaxCity, ainData);
   res.status(200).json({ ok: true, at: Date.now(), count: messages.length, stats, alert, messages });
 }
