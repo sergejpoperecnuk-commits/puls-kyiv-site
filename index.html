@@ -15,7 +15,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png"/>
 <link rel="apple-touch-icon" href="/apple-touch-icon.png"/>
 <title>Пульс Києва</title>
-<!-- pulse-chrome-v16-map-20260918 -->
+<!-- pulse-chrome-v17-airfields-20260918 -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
@@ -125,6 +125,16 @@ button:not(:disabled) { cursor: pointer; }
 .stat dt { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); font-weight: 600; line-height: 1.25; }
 .stat dd { margin: 6px 0 0; font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 .stat.quiet dd { color: var(--quiet); }
+.af { margin-top: 16px; }
+.af-row {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+  background: var(--raised); border-radius: 10px; padding: 10px 12px; margin-top: 6px;
+}
+.af-row b { font-size: 13px; font-weight: 600; }
+.af-st { font-size: 12px; font-weight: 650; white-space: nowrap; }
+.af-st.hot { color: var(--danger); }
+.af-st.quiet { color: var(--signal); }
+.af-st.none { color: var(--quiet); }
 .toggle {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   width: 100%; border: 0; background: var(--raised); color: var(--ink);
@@ -274,6 +284,7 @@ const SOURCES = [
   { id: "ka", title: "Київ Моніторинг", user: "KyivAlarm", cat: "Тривога", initials: "КА" },
   { id: "va", title: "КМВА", user: "VA_Kyiv", cat: "Офіційне", initials: "ВА" },
   { id: "od", title: "Київська ОВА", user: "kyivoda", cat: "Офіційне", initials: "ОД" },
+  { id: "ps", title: "Повітряні Сили", user: "kpszsu", cat: "Офіційне", initials: "ПС" },
 ];
 const CATS = ["Усі", "Тривога", "Офіційне"];
 const TABS = [
@@ -510,7 +521,42 @@ function statsGrid() {
 function heroBlock() {
   const latest = messages[0];
   const lastLine = latest ? ("Останнє · " + ago(latest.t) + " · " + latest.s.title) : "Відкриті Telegram-канали зі списку джерел";
-  return '<div class="hero"><div class="hero-top"><div><div class="kicker">Огляд</div><div class="city-head">' + motherlandMark() + "<h3>Київ</h3></div><p class=\"muted\" style=\"margin:6px 0 0\">" + lastLine + "</p></div>" + liveBadge() + "</div>" + sirenBlock() + statsGrid() + "</div>";
+  return '<div class="hero"><div class="hero-top"><div><div class="kicker">Огляд</div><div class="city-head">' + motherlandMark() + "<h3>Київ</h3></div><p class=\"muted\" style=\"margin:6px 0 0\">" + lastLine + "</p></div>" + liveBadge() + "</div>" + sirenBlock() + statsGrid() + airfieldBlock() + "</div>";
+}
+const AIRFIELD_SITES = [
+  ["pakh", "Приморсько-Ахтарськ", /приморськ[о.\-\s]*ахтар|приморско[.\-\s]*ахтар/i],
+  ["chauda", "Чауда", /чауда/i],
+  ["eysk", "Єйськ", /\bєйськ|\bейск/i],
+  ["kush", "Кущевська", /кущевськ|кущевск/i],
+  ["kursk", "Курськ", /аеродром.{0,24}курськ|курськ.{0,24}аеродром|пуск.{0,20}курськ|з курськ/i],
+  ["engels", "Енгельс", /енгельс|энгельс/i],
+  ["dzhan", "Джанкой", /джанкой/i],
+  ["strat", "Стратегічна авіація", /стратегічн\w*\s+авіац/i],
+];
+function airfieldActivity() {
+  const now = Date.now();
+  return AIRFIELD_SITES.map(function (site) {
+    let best = null;
+    messages.forEach(function (m) {
+      if (!site[2].test(m.text || "")) return;
+      if (!best || m.t > best.t) best = m;
+    });
+    if (!best || now - best.t > 10 * 60 * 60 * 1000) {
+      return { name: site[1], cls: "none", label: "немає згадок" };
+    }
+    const t = String(best.text || "");
+    const quiet = /не активн|без пуск|пусків немає|відсутн/.test(t);
+    const hot = !quiet && /пуск|запуск|старт|підйом|виліт|активн|підтверджен/.test(t);
+    if (hot) return { name: site[1], cls: "hot", label: "пуски · " + ago(best.t) };
+    if (quiet) return { name: site[1], cls: "quiet", label: "не активно · " + ago(best.t) };
+    return { name: site[1], cls: "quiet", label: "згадка · " + ago(best.t) };
+  });
+}
+function airfieldBlock() {
+  const rows = airfieldActivity().map(function (r) {
+    return '<div class="af-row"><b>' + r.name + '</b><span class="af-st ' + r.cls + '">' + r.label + "</span></div>";
+  }).join("");
+  return '<div class="af"><div class="kicker">Пуски БпЛА</div><p class="muted" style="margin:6px 0 8px">Ворожі майданчики з відкритих каналів. Лише згадки, без координат.</p>' + rows + "</div>";
 }
 function pushOn() {
   return localStorage.getItem("pulse-push") === "1" && typeof Notification !== "undefined" && Notification.permission === "granted";
