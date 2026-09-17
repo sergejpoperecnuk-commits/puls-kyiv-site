@@ -12,7 +12,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png"/>
 <link rel="apple-touch-icon" href="/apple-touch-icon.png"/>
 <title>Пульс Києва</title>
-<!-- pulse-chrome-v11-siren-10s-loud-20260918 -->
+<!-- pulse-chrome-v12-watch-districts-20260918 -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap"/>
 <style>
 :root {
@@ -111,6 +111,11 @@ button:not(:disabled) { cursor: pointer; }
   background: var(--danger); color: #fff; font-weight: 700; font-size: 15px;
 }
 .test-btn:disabled { opacity: .55; }
+.watch-actions { display: flex; gap: 8px; margin-top: 10px; }
+.watch-actions button {
+  flex: 1; border: 1px solid var(--hair); background: var(--raised); color: var(--ink);
+  border-radius: 10px; padding: 10px 8px; font-weight: 600;
+}
 .siren {
   display: inline-flex; align-items: center; gap: 8px;
   margin-top: 12px; border-radius: 999px; padding: 8px 12px;
@@ -234,7 +239,19 @@ function ago(ts) {
 let tab = "home", q = "", cat = "Усі", messages = [];
 let extraDraft = "", extraError = "", extraBusy = false;
 let alertStatus = { level: "clear", title: "Немає тривоги", where: "Київ", detail: "перевіряємо…" };
+let serverAlert = alertStatus;
+let zones = [];
 let feedStats = { today: 0, last24h: 0, sourceCount: 9, scraperOk: false, todayAlerts: 0, durationLabel: "0 год" };
+const WATCH_AREAS = [
+  { id: 31, name: "м. Київ", short: "Київ" },
+  { id: 75, name: "Бучанський район", short: "Бучанський" },
+  { id: 74, name: "Вишгородський район", short: "Вишгородський" },
+  { id: 79, name: "Броварський район", short: "Броварський" },
+  { id: 78, name: "Бориспільський район", short: "Бориспільський" },
+  { id: 76, name: "Обухівський район", short: "Обухівський" },
+  { id: 77, name: "Фастівський район", short: "Фастівський" },
+  { id: 73, name: "Білоцерківський район", short: "Білоцерківський" },
+];
 function pulseMark() {
   return '<svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#191b20"/><path d="M3.5 17.5H9.1L12.15 7.4 16.7 25.6 20.1 17.5H28.5" fill="none" stroke="#7dcfb6" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 }
@@ -306,6 +323,110 @@ function pushOn() {
 function soundOn() {
   return localStorage.getItem("pulse-sound") !== "0";
 }
+function readWatch() {
+  try {
+    const raw = JSON.parse(localStorage.getItem("pulse-watch") || "null");
+    if (Array.isArray(raw) && raw.length) {
+      const ids = raw.map(Number).filter(function (id) {
+        return WATCH_AREAS.some(function (a) { return a.id === id; });
+      });
+      if (ids.length) return ids;
+    }
+  } catch (e) {}
+  return [75];
+}
+function saveWatch(ids) {
+  localStorage.setItem("pulse-watch", JSON.stringify(ids));
+}
+function watchNames(ids) {
+  return WATCH_AREAS.filter(function (a) { return ids.indexOf(a.id) !== -1; })
+    .map(function (a) { return a.short; }).join(", ");
+}
+function applyLocalAlert(base, list) {
+  if (base && (base.kind === "ballistic" || base.kind === "mig31")) {
+    return Object.assign({}, base, { siren: true });
+  }
+  const selected = readWatch();
+  const picked = (list || []).filter(function (z) { return selected.indexOf(z.id) !== -1; });
+  const red = picked.filter(function (z) { return z.level === "red"; });
+  const yellow = picked.filter(function (z) { return z.level === "yellow"; });
+  function names(arr) {
+    return arr.map(function (z) { return z.short || z.name; }).join(", ");
+  }
+  if (red.length) {
+    return {
+      level: "red",
+      title: "Тривога",
+      where: names(red),
+      detail: "alerts.in.ua · " + names(red),
+      since: (base && base.since) || Date.now(),
+      source: "official",
+      bucha: red.some(function (z) { return z.id === 75; }),
+      siren: true,
+      kind: "air",
+    };
+  }
+  if (yellow.length) {
+    return {
+      level: "yellow",
+      title: "Загроза",
+      where: names(yellow),
+      detail: "alerts.in.ua · жовтий рівень · " + names(yellow),
+      since: Date.now(),
+      source: "official",
+      bucha: false,
+      siren: false,
+      kind: "air",
+    };
+  }
+  const where = picked.length ? names(picked) : "обрані райони";
+  return {
+    level: "clear",
+    title: "Немає тривоги",
+    where: where,
+    detail: "alerts.in.ua · відбій · " + where,
+    since: (base && base.since) || Date.now(),
+    source: "official",
+    bucha: false,
+    siren: false,
+    kind: "clear",
+  };
+}
+function setWatch(ids) {
+  const clean = ids.map(Number).filter(function (id) {
+    return WATCH_AREAS.some(function (a) { return a.id === id; });
+  });
+  saveWatch(clean.length ? clean : [75]);
+  const prev = alertStatus;
+  alertStatus = applyLocalAlert(serverAlert, zones);
+  if (alertStatus.siren && soundOn() && (alertStatus.where !== prev.where || alertStatus.level !== prev.level)) {
+    playOfficialSiren();
+    lastAlertLevel = (alertStatus.kind || "air") + ":" + (alertStatus.where || "") + ":" + (alertStatus.since || 0);
+  }
+  render();
+}
+function toggleWatch(id) {
+  const n = Number(id);
+  let ids = readWatch().slice();
+  const i = ids.indexOf(n);
+  if (i >= 0) {
+    if (ids.length === 1) return;
+    ids.splice(i, 1);
+  } else {
+    ids.push(n);
+  }
+  setWatch(ids);
+}
+function watchBox() {
+  const selected = readWatch();
+  const rows = WATCH_AREAS.map(function (a) {
+    const on = selected.indexOf(a.id) !== -1;
+    return '<button class="toggle' + (on ? " on" : "") + '" data-watch="' + a.id + '"><span>' + a.name + '</span><span class="switch"><i></i></span></button>';
+  }).join("");
+  return '<div class="card" style="margin-top:16px"><p style="margin:0 0 8px"><b>Райони для сирени</b></p><p class="muted" style="margin:0 0 10px">Сирена і пуш лише для позначених. Карта — alerts.in.ua. Балістика і МіГ-31 — завжди.</p>' +
+    rows +
+    '<div class="watch-actions"><button type="button" id="watch-all">Усі райони</button><button type="button" id="watch-bucha">Лише Буча</button></div></div>';
+}
 function setSound(on) {
   localStorage.setItem("pulse-sound", on ? "1" : "0");
   if (on) unlockAudio();
@@ -315,7 +436,7 @@ function setSound(on) {
 function pushStatusText() {
   if (typeof Notification === "undefined") return "Цей браузер не вміє пуш.";
   if (Notification.permission === "denied") return "Браузер заборонив сповіщення. Дозвольте їх у налаштуваннях сайту.";
-  if (pushOn()) return "Увімкнено: пуш лише для Бучанського району.";
+  if (pushOn()) return "Увімкнено: " + watchNames(readWatch()) + ".";
   return "Вимкнено.";
 }
 let seenIds = new Set();
@@ -434,7 +555,7 @@ async function setPush(on) {
     localStorage.setItem("pulse-push", "1");
     unlockAudio();
     try { await navigator.serviceWorker.register("/sw.js"); } catch (e) {}
-    notifyUser("Пульс Києва", "Пуш для Бучанського району увімкнено", "pulse-on");
+    notifyUser("Пульс Києва", "Пуш для " + watchNames(readWatch()) + " увімкнено", "pulse-on");
   } else {
     localStorage.setItem("pulse-push", "0");
   }
@@ -466,7 +587,7 @@ function render() {
   savedScroll = prevMain ? prevMain.scrollTop : savedScroll;
   let main = "";
   if (tab === "home") {
-    main = heroBlock() + (soundOn() ? "" : '<button class="toggle" id="sound-home" style="margin-bottom:14px"><span>Увімкнути звук для Бучанського району</span><span class="switch"><i></i></span></button>') + list.slice(0, 8).map(card).join("");
+    main = heroBlock() + (soundOn() ? "" : '<button class="toggle" id="sound-home" style="margin-bottom:14px"><span>Увімкнути звук для обраних районів</span><span class="switch"><i></i></span></button>') + list.slice(0, 8).map(card).join("");
   } else if (tab === "feed") {
     main = list.map(card).join("") || '<p class="muted">Чекаємо пости…</p>';
   } else if (tab === "sources") {
@@ -479,11 +600,12 @@ function render() {
   } else if (tab === "search") {
     main = list.length ? list.map(card).join("") : '<p class="muted">Нічого не знайдено.</p>';
   } else {
-    main = '<div class="card"><p style="margin:0 0 8px"><b>Сповіщення</b></p><p class="muted">Сирена 10 секунд, один раз: офіційна тривога в Бучанському районі, загроза балістики або виліт МіГ-31. Без повтору, поки подія та сама.</p></div>' +
+    main = '<div class="card"><p style="margin:0 0 8px"><b>Сповіщення</b></p><p class="muted">Сирена 10 секунд, один раз: тривога в обраних районах, загроза балістики або виліт МіГ-31. Без повтору, поки подія та сама.</p></div>' +
       '<button class="toggle' + (soundOn() ? " on" : "") + '" id="sound-toggle"><span>Звук тривоги</span><span class="switch"><i></i></span></button>' +
-      '<p class="muted" style="margin:10px 2px 16px">' + (soundOn() ? "Увімкнено: сирена для Бучанського району." : "Вимкнено.") + "</p>" +
+      '<p class="muted" style="margin:10px 2px 16px">' + (soundOn() ? "Увімкнено: сирена для " + watchNames(readWatch()) + "." : "Вимкнено.") + "</p>" +
       '<button class="toggle' + (pushOn() ? " on" : "") + '" id="push-toggle"><span>Пуш-повідомлення</span><span class="switch"><i></i></span></button>' +
       '<p class="muted" id="push-status" style="margin:10px 2px 0">' + pushStatusText() + "</p>" +
+      watchBox() +
       '<button class="test-btn" id="test-boost"' + (testBusy ? " disabled" : "") + ">" + (testBusy ? "Тест іде…" : "Тестова тривога") + "</button>" +
       '<p class="muted" style="margin:10px 2px 0">Сирена 10 секунд і пуш. Напис ТЕСТ. Справжню тривогу не оголошує.</p>' +
       '<div class="card" style="margin-top:16px"><p class="muted" style="margin:0">Оновлення з публічних Telegram-каналів кожні 15 с. Свайп зверху вниз — оновити зараз.</p></div>' +
@@ -535,6 +657,13 @@ function render() {
   if (testBtn) {
     testBtn.onclick = function () { runTestBoost(); };
   }
+  document.querySelectorAll("[data-watch]").forEach(function (b) {
+    b.onclick = function () { toggleWatch(b.getAttribute("data-watch")); };
+  });
+  const watchAll = document.getElementById("watch-all");
+  if (watchAll) watchAll.onclick = function () { setWatch(WATCH_AREAS.map(function (a) { return a.id; })); };
+  const watchBucha = document.getElementById("watch-bucha");
+  if (watchBucha) watchBucha.onclick = function () { setWatch([75]); };
   const extraInp = document.getElementById("extra-q");
   if (extraInp) {
     extraInp.value = extraDraft;
@@ -646,7 +775,9 @@ async function loadFeed() {
     const data = await (await fetch(url, { cache: "no-store" })).json();
     if (data.ok) {
       if (data.messages && data.messages.length) messages = data.messages;
-      if (data.alert) alertStatus = data.alert;
+      if (data.alert) serverAlert = data.alert;
+      if (data.zones) zones = data.zones;
+      alertStatus = applyLocalAlert(serverAlert, zones);
       if (data.stats) feedStats = data.stats;
       const stored = readExtras();
       let changed = false;
@@ -662,7 +793,7 @@ async function loadFeed() {
       if (changed) saveExtras(stored);
       if (bootDone) {
         const sirenOn = alertStatus.level === "red" && alertStatus.siren;
-        const sirenKey = sirenOn ? (alertStatus.kind || "air") + ":" + (alertStatus.since || 0) : "off";
+        const sirenKey = sirenOn ? (alertStatus.kind || "air") + ":" + (alertStatus.where || "") + ":" + (alertStatus.since || 0) : "off";
         if (sirenOn && lastAlertLevel !== sirenKey) {
           if (soundOn()) playOfficialSiren();
           notifyUser(alertStatus.title + " · " + alertStatus.where, alertStatus.detail, "pulse-alert");
@@ -672,7 +803,7 @@ async function loadFeed() {
       }
       bootDone = true;
       lastAlertLevel = alertStatus.level === "red" && alertStatus.siren
-        ? (alertStatus.kind || "air") + ":" + (alertStatus.since || 0)
+        ? (alertStatus.kind || "air") + ":" + (alertStatus.where || "") + ":" + (alertStatus.since || 0)
         : "off";
       seenIds = new Set(messages.map(function (m) { return m.id; }));
       render();
