@@ -9,9 +9,17 @@ const SOURCES = [
   { id: "va", title: "КМВА", user: "VA_Kyiv", cat: "Офіційне", initials: "ВА" },
   { id: "od", title: "Київська ОВА", user: "kyivoda", cat: "Офіційне", initials: "ОД" },
   { id: "ps", title: "Повітряні Сили", user: "kpszsu", cat: "Офіційне", initials: "ПС" },
+  { id: "oo", title: "Одеська ОВА", user: "odeskaODA", cat: "Офіційне", initials: "ОО" },
+  { id: "of", title: "Одеса офіційно", user: "odessa_official", cat: "Офіційне", initials: "ОФ" },
+  { id: "oa", title: "Тривога Одеса", user: "air_alert_odessa", cat: "Тривога", initials: "ТО" },
+  { id: "om", title: "Одеса монітор", user: "odessa_monitor", cat: "Тривога", initials: "ОМ" },
+  { id: "po", title: "ППО Одеса", user: "ppo_odessa", cat: "Тривога", initials: "ПО" },
+  { id: "vo", title: "Вінницька ОВА", user: "vinnytskaODA", cat: "Офіційне", initials: "ВО" },
+  { id: "va2", title: "Вінниця ОДА", user: "vinnytsiaODA", cat: "Офіційне", initials: "ВД" },
+  { id: "vl", title: "Тривога Вінниця", user: "vinnytsia_alarm", cat: "Тривога", initials: "ТВ" },
 ];
 const BY_USER = Object.fromEntries(SOURCES.map((s) => [s.user.toLowerCase(), s]));
-const OFFICIAL_USERS = new Set(["va_kyiv", "kyivoda", "kpszsu"]);
+const OFFICIAL_USERS = new Set(["va_kyiv", "kyivoda", "kpszsu", "odeskaoda", "odessa_official", "vinnytskaoda", "vinnytsiaoda"]);
 const NBSP = "\u0026nbsp;";
 const AMP = "\u0026amp;";
 const DISTRICTS = [
@@ -233,14 +241,29 @@ function ajaxLevel(ajax, ids) {
 }
 
 const WATCH_AREAS = [
-  { id: 31, name: "м. Київ", short: "Київ" },
-  { id: 75, name: "Бучанський район", short: "Бучанський" },
-  { id: 74, name: "Вишгородський район", short: "Вишгородський" },
-  { id: 79, name: "Броварський район", short: "Броварський" },
-  { id: 78, name: "Бориспільський район", short: "Бориспільський" },
-  { id: 76, name: "Обухівський район", short: "Обухівський" },
-  { id: 77, name: "Фастівський район", short: "Фастівський" },
-  { id: 73, name: "Білоцерківський район", short: "Білоцерківський" },
+  { id: 31, name: "м. Київ", short: "Київ", oblast: 14 },
+  { id: 75, name: "Бучанський район", short: "Бучанський", oblast: 14 },
+  { id: 74, name: "Вишгородський район", short: "Вишгородський", oblast: 14 },
+  { id: 79, name: "Броварський район", short: "Броварський", oblast: 14 },
+  { id: 78, name: "Бориспільський район", short: "Бориспільський", oblast: 14 },
+  { id: 76, name: "Обухівський район", short: "Обухівський", oblast: 14 },
+  { id: 77, name: "Фастівський район", short: "Фастівський", oblast: 14 },
+  { id: 73, name: "Білоцерківський район", short: "Білоцерківський", oblast: 14 },
+  { id: 18, name: "Одеська область", short: "Одещина", oblast: 18 },
+  { id: 104, name: "Одеський район", short: "Одеський", oblast: 18 },
+  { id: 102, name: "Білгород-Дністровський", short: "Білгород-Дністровський", oblast: 18 },
+  { id: 100, name: "Березівський район", short: "Березівський", oblast: 18 },
+  { id: 101, name: "Ізмаїльський район", short: "Ізмаїльський", oblast: 18 },
+  { id: 105, name: "Болградський район", short: "Болградський", oblast: 18 },
+  { id: 103, name: "Роздільнянський район", short: "Роздільнянський", oblast: 18 },
+  { id: 99, name: "Подільський район", short: "Подільський (Од.)", oblast: 18 },
+  { id: 4, name: "Вінницька область", short: "Вінниччина", oblast: 4 },
+  { id: 36, name: "Вінницький район", short: "Вінницький", oblast: 4 },
+  { id: 37, name: "Гайсинський район", short: "Гайсинський", oblast: 4 },
+  { id: 35, name: "Жмеринський район", short: "Жмеринський", oblast: 4 },
+  { id: 33, name: "Могилів-Подільський", short: "Могилів-Подільський", oblast: 4 },
+  { id: 32, name: "Тульчинський район", short: "Тульчинський", oblast: 4 },
+  { id: 34, name: "Хмільницький район", short: "Хмільницький", oblast: 4 },
 ];
 
 function strongerLevel(a, b) {
@@ -253,7 +276,7 @@ function parseAin(data) {
   const byId = {};
   for (const area of WATCH_AREAS) byId[area.id] = "";
   const alerts = data && Array.isArray(data.alerts) ? data.alerts : null;
-  const out = { ok: Boolean(alerts), byId: byId, oblastWide: "" };
+  const out = { ok: Boolean(alerts), byId: byId, oblastWide: {} };
   if (!alerts) return out;
   for (const a of alerts) {
     if (a.f) continue;
@@ -262,7 +285,9 @@ function parseAin(data) {
     const uid = Number(a.luid);
     const raion = Number(a.lruid);
     const level = Number(a.al) === 1 ? "yellow" : "red";
-    if (uid === 14) out.oblastWide = strongerLevel(out.oblastWide, level);
+    if (uid === 14 || uid === 18 || uid === 4) {
+      out.oblastWide[uid] = strongerLevel(out.oblastWide[uid] || "", level);
+    }
     if (Object.prototype.hasOwnProperty.call(byId, uid)) {
       byId[uid] = strongerLevel(byId[uid], level);
     }
@@ -270,11 +295,9 @@ function parseAin(data) {
       byId[raion] = strongerLevel(byId[raion], level);
     }
   }
-  if (out.oblastWide) {
-    for (const area of WATCH_AREAS) {
-      if (area.id === 31) continue;
-      byId[area.id] = strongerLevel(byId[area.id], out.oblastWide);
-    }
+  for (const area of WATCH_AREAS) {
+    const wide = out.oblastWide[area.oblast];
+    if (wide && area.id !== 31) byId[area.id] = strongerLevel(byId[area.id], wide);
   }
   return out;
 }
@@ -525,7 +548,7 @@ export default async function handler(req, res) {
     Promise.all(sources.map(scrape)),
     fetchJson("https://alerts.com.ua/api/states/25", 5000),
     fetchJson("https://alerts.com.ua/api/states/9", 5000),
-    fetchJson("https://air-save.ops.ajax.systems/api/mobile/status/regions/v2?regions=14,31,73,74,75,76,77,78,79", 5000),
+    fetchJson("https://air-save.ops.ajax.systems/api/mobile/status/regions/v2?regions=14,31,73,74,75,76,77,78,79,4,18,36,104,32,33,34,35,37,99,100,101,102,103,105", 5000),
     fetchJson("https://my-kiev.com/alerts/api/history/31", 5000),
     fetchJson("https://api.alerts.in.ua/v3/alerts/active.json", 5000),
   ]);
