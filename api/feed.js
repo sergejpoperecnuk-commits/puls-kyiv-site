@@ -152,7 +152,9 @@ function stamp(wrap) {
   if (!wrap) return 0;
   const raw = (wrap.state && wrap.state.changed) || wrap.last_update || wrap.changed || 0;
   const n = new Date(raw).getTime();
-  return Number.isFinite(n) ? n : 0;
+  if (!Number.isFinite(n)) return 0;
+  if (Date.now() - n > 36 * 60 * 60 * 1000) return 0;
+  return n;
 }
 
 function isFreshOn(wrap) {
@@ -166,105 +168,93 @@ function ajaxOnKyiv(ajax) {
   return Boolean(ajax && Array.isArray(ajax.alarms) && ajax.alarms.length > 0);
 }
 
-function buildAlert(messages, cityWrap, oblastWrap, ajax) {
-  const cityOn = isFreshOn(cityWrap);
-  const oblastOn = isFreshOn(oblastWrap);
-  const ajaxOn = ajaxOnKyiv(ajax);
+function mentionsBucha(text) {
+  const t = String(text || "").toLowerCase();
+  return /бучанськ|\bбуча\b|\bбучі\b|ірпін|гостом|бородян|макарів|ворзел|коцюбинськ|немшаїв|пісківк/.test(t);
+}
+
+function buildAlert(messages, cityWrap, oblastWrap, ajaxOblast, ajaxCity) {
+  const cityOn = isFreshOn(cityWrap) || ajaxOnKyiv(ajaxCity);
+  const oblastOn = isFreshOn(oblastWrap) || ajaxOnKyiv(ajaxOblast);
   const mapOk = Boolean(cityWrap && cityWrap.state);
-  const ajaxOk = Boolean(ajax && Array.isArray(ajax.alarms));
+  const ajaxOk = Boolean(
+    (ajaxOblast && Array.isArray(ajaxOblast.alarms)) ||
+      (ajaxCity && Array.isArray(ajaxCity.alarms)),
+  );
 
   const official = (messages || []).filter(isOfficialMsg);
-  let districts = [];
   let lastRed = 0;
   let lastClear = 0;
+  let lastBuchaRed = 0;
+  let lastBuchaClear = 0;
   for (const m of official) {
     if (Date.now() - m.t > 6 * 60 * 60 * 1000) continue;
-    const ds = findDistricts(m.text);
+    const bucha = mentionsBucha(m.text);
     if (isRedText(m.text)) {
       if (m.t > lastRed) lastRed = m.t;
-      districts = districts.concat(ds);
+      if (bucha && m.t > lastBuchaRed) lastBuchaRed = m.t;
     } else if (isClearText(m.text)) {
       if (m.t > lastClear) lastClear = m.t;
+      if (bucha && m.t > lastBuchaClear) lastBuchaClear = m.t;
     }
   }
-  districts = districts.filter((v, i, a) => a.indexOf(v) === i);
 
-  const officialOn = cityOn || oblastOn || ajaxOn;
-  if (officialOn) {
+  const buchaOn = oblastOn || lastBuchaRed > lastBuchaClear;
+  const anyOn = cityOn || buchaOn;
+
+  if (anyOn) {
     let where = "Київ";
-    if ((oblastOn || ajaxOn) && !cityOn) where = "Київська область";
-    if (cityOn && (oblastOn || ajaxOn)) where = "Київ і область";
-    if (districts.length && !wholeCity(official.map((m) => m.text).join(" "))) {
-      where = districts.slice(0, 3).join(", ");
-    }
-    const since = cityOn
-      ? stamp(cityWrap)
-      : oblastOn
-        ? stamp(oblastWrap)
-        : lastRed || Date.now();
+    if (buchaOn && cityOn) where = "Київ і Бучанський район";
+    else if (buchaOn) where = "Бучанський район";
+    const since = buchaOn
+      ? stamp(oblastWrap) || lastBuchaRed || Date.now()
+      : stamp(cityWrap) || lastRed || Date.now();
     return {
       level: "red",
       title: "Тривога",
       where,
-      detail: "офіційно · сирена · з " + formatSince(since),
+      detail: buchaOn
+        ? "офіційно · Бучанський район · з " + formatSince(since)
+        : "офіційно · Київ · без сирени в Бучі · з " + formatSince(since),
       since: since || Date.now(),
       source: "official",
+      bucha: buchaOn,
     };
   }
 
-  if (mapOk || ajaxOk) {
-    const since = stamp(cityWrap) || lastClear || Date.now();
+  if (mapOk || ajaxOk || lastBuchaClear || lastClear) {
+    const since = stamp(oblastWrap) || lastBuchaClear || stamp(cityWrap) || lastClear || Date.now();
     return {
       level: "clear",
       title: "Немає тривоги",
-      where: "Київ",
-      detail: "офіційно · відбій · " + formatSince(since),
+      where: "Бучанський район",
+      detail: "офіційно · Бучанський район · відбій · " + formatSince(since),
       since,
       source: "official",
-    };
-  }
-
-  if (lastRed > lastClear) {
-    const where = districts.length ? districts.slice(0, 3).join(", ") : "Київ";
-    return {
-      level: "red",
-      title: "Тривога",
-      where,
-      detail: "офіційно · КМВА / ОВА · з " + formatSince(lastRed),
-      since: lastRed,
-      source: "official-tg",
-    };
-  }
-
-  if (lastClear) {
-    return {
-      level: "clear",
-      title: "Немає тривоги",
-      where: "Київ",
-      detail: "офіційно · КМВА / ОВА · відбій · " + formatSince(lastClear),
-      since: lastClear,
-      source: "official-tg",
+      bucha: false,
     };
   }
 
   return {
     level: "clear",
     title: "Немає тривоги",
-    where: "Київ",
-    detail: "офіційні джерела · сирени немає",
+    where: "Бучанський район",
+    detail: "офіційні джерела · сирени в Бучанському районі немає",
     since: Date.now(),
     source: "official",
+    bucha: false,
   };
 }
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Cache-Control", "s-maxage=20, stale-while-revalidate=40");
-  const [lists, cityWrap, oblastWrap, ajax] = await Promise.all([
+  const [lists, cityWrap, oblastWrap, ajaxOblast, ajaxCity] = await Promise.all([
     Promise.all(SOURCES.map((s) => scrape(s.user))),
     fetchJson("https://alerts.com.ua/api/states/25", 5000),
     fetchJson("https://alerts.com.ua/api/states/9", 5000),
-    fetchJson("https://air-save.ops.ajax.systems/api/mobile/status/regions/v2?regions=14,31", 5000),
+    fetchJson("https://air-save.ops.ajax.systems/api/mobile/status/regions/v2?regions=14", 5000),
+    fetchJson("https://air-save.ops.ajax.systems/api/mobile/status/regions/v2?regions=31", 5000),
   ]);
   const seen = new Set();
   const all = lists
@@ -285,6 +275,6 @@ export default async function handler(req, res) {
     scraperOk: all.length > 0,
   };
   const messages = all.slice(0, 60);
-  const alert = buildAlert(messages, cityWrap, oblastWrap, ajax);
+  const alert = buildAlert(messages, cityWrap, oblastWrap, ajaxOblast, ajaxCity);
   res.status(200).json({ ok: true, at: Date.now(), count: messages.length, stats, alert, messages });
 }
