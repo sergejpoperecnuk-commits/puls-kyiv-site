@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
 <meta name="theme-color" content="#09090b"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
@@ -62,10 +63,13 @@ button:not(:disabled) { cursor: pointer; }
 .nav button.on { background: var(--raised); color: var(--ink); }
 .col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .top {
-  min-height: 56px; display: flex; align-items: center; gap: 12px;
-  padding: 0 16px; padding-top: env(safe-area-inset-top);
-  border-bottom: 1px solid var(--hair); background: rgb(17 18 20 / .92);
+  min-height: 56px; display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; padding-top: max(8px, env(safe-area-inset-top));
+  border-bottom: 1px solid var(--hair); background: var(--panel);
+  position: sticky; top: 0; z-index: 60;
 }
+.top-brand { display: flex; align-items: center; gap: 10px; min-width: 0; flex-shrink: 0; }
+.top .mark { width: 32px; height: 32px; }
 .top h2 { margin: 0; font-size: 15px; }
 .search { margin-left: auto; width: min(320px, 48vw); }
 .search input {
@@ -129,16 +133,18 @@ button:not(:disabled) { cursor: pointer; }
   .side, .rail { display: none !important; }
   .body { grid-template-columns: 1fr; }
   .search { width: min(52vw, 220px); }
-  .main { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+  .main { padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
   .stats { grid-template-columns: 1fr 1fr; }
   .dock {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
     position: fixed;
     left: 0; right: 0; bottom: 0;
-    z-index: 50;
-    background: rgb(17 18 20 / .97);
+    z-index: 80;
+    background: #111214;
+    isolation: isolate;
     border-top: 1px solid var(--hair);
+    box-shadow: 0 -18px 36px #09090b;
     padding-bottom: env(safe-area-inset-bottom);
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
@@ -194,7 +200,7 @@ let tab = "home", q = "", cat = "Усі", messages = [];
 let alertStatus = { level: "clear", title: "Немає тривоги", where: "Київ", detail: "перевіряємо…" };
 let feedStats = { today: 0, last24h: 0, sourceCount: 9, scraperOk: false };
 function pulseMark() {
-  return '<svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#191b20"/><path d="M6.5 17.5h3.6l2.2-7 3.8 13 2.6-6h6.8" fill="none" stroke="#7dcfb6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  return '<svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#191b20"/><path d="M3.5 17.5H9.1L12.15 7.4 16.7 25.6 20.1 17.5H28.5" fill="none" stroke="#7dcfb6" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 }
 function liveBadge() {
   return '<div class="live"><span class="live-dot"></span> Наживо</div>';
@@ -299,7 +305,7 @@ function render() {
     return '<button class="' + (tab === item.id ? "on" : "") + '" data-tab="' + item.id + '">' + icon(item.icon) + "<span>" + item.label + "</span></button>";
   }).join("");
   document.getElementById("root").innerHTML =
-    '<div class="app"><aside class="side"><div class="brand">' + pulseMark() + '<div><b>Пульс Києва</b><br><small class="muted">Цивільний моніторинг</small></div></div><nav class="nav">' + sideNav + '</nav></aside><div class="col"><header class="top"><div><h2>' + titles.title + '</h2><p class="muted" style="margin:2px 0 0">' + messages.length + ' повідомлень</p></div><div class="search"><input id="q" placeholder="Пошук у стрічці"/></div></header><div class="body"><section class="main">' + main + '</section><aside class="rail"><div class="kicker">Сьогодні</div><p style="font-size:36px;margin:4px 0">' + messages.length + "</p>" + CATS.map(function (c) { return '<button data-cat="' + c + '" class="' + (c === cat ? "on" : "") + '" style="margin:4px 4px 0 0;border:0;border-radius:999px;padding:6px 10px;background:' + (c === cat ? "var(--ink)" : "var(--raised)") + ';color:' + (c === cat ? "var(--canvas)" : "var(--quiet)") + '">' + c + "</button>"; }).join("") + SOURCES.map(function (s) { return '<p>' + s.title + '<br><small class="muted">@' + s.user + "</small></p>"; }).join("") + '</aside></div></div></div><nav class="dock" aria-label="Розділи">' + dock + "</nav>";
+    '<div class="app"><aside class="side"><div class="brand">' + pulseMark() + '<div><b>Пульс Києва</b><br><small class="muted">Цивільний моніторинг</small></div></div><nav class="nav">' + sideNav + '</nav></aside><div class="col"><header class="top"><div class="top-brand">' + pulseMark() + '<div><h2>Пульс</h2><p class="muted" style="margin:2px 0 0">' + titles.title + ' · ' + messages.length + ' повідомлень</p></div></div><div class="search"><input id="q" placeholder="Пошук у стрічці"/></div></header><div class="body"><section class="main">' + main + '</section><aside class="rail"><div class="kicker">Сьогодні</div><p style="font-size:36px;margin:4px 0">' + messages.length + "</p>" + CATS.map(function (c) { return '<button data-cat="' + c + '" class="' + (c === cat ? "on" : "") + '" style="margin:4px 4px 0 0;border:0;border-radius:999px;padding:6px 10px;background:' + (c === cat ? "var(--ink)" : "var(--raised)") + ';color:' + (c === cat ? "var(--canvas)" : "var(--quiet)") + '">' + c + "</button>"; }).join("") + SOURCES.map(function (s) { return '<p>' + s.title + '<br><small class="muted">@' + s.user + "</small></p>"; }).join("") + '</aside></div></div></div><nav class="dock" aria-label="Розділи">' + dock + "</nav>";
   document.querySelectorAll("[data-tab]").forEach(function (b) {
     b.onclick = function () { tab = b.getAttribute("data-tab"); render(); };
   });
