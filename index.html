@@ -12,6 +12,7 @@
   --canvas:#09090b; --panel:#111214; --raised:#191b20; --ink:#ecece8;
   --quiet:#8c8e94; --dim:#6a6c72; --signal:#7dcfb6;
   --hair:rgb(236 236 232 / .08);
+  --danger:#e07070; --warn:#d4b37a;
   font-family: Manrope, system-ui, sans-serif;
   color: var(--ink); background: var(--canvas);
 }
@@ -53,6 +54,20 @@ button:not(:disabled) { cursor: pointer; }
 .main { overflow: auto; padding: 20px 16px 24px; }
 .rail { border-left: 1px solid var(--hair); overflow: auto; padding: 22px 18px; background: var(--panel); }
 .hero { background: var(--panel); border: 1px solid var(--hair); border-radius: 16px; padding: 16px; margin-bottom: 18px; }
+.hero-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.siren {
+  display: inline-flex; align-items: center; gap: 8px;
+  margin-top: 12px; border-radius: 999px; padding: 8px 12px;
+  font-size: 12px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase;
+  border: 1px solid transparent;
+}
+.siren.red .pulse, .siren.yellow .pulse { animation: sirenblink 1.4s ease-in-out infinite; }
+@keyframes sirenblink { 50% { opacity: .35; transform: scale(.85); } }
+.siren.red { color: var(--danger); background: rgb(224 112 112 / .12); border-color: rgb(224 112 112 / .35); }
+.siren.yellow { color: var(--warn); background: rgb(212 179 122 / .12); border-color: rgb(212 179 122 / .35); }
+.siren.clear { color: var(--signal); background: rgb(125 207 182 / .1); border-color: rgb(125 207 182 / .28); }
+.siren .where { text-transform: none; letter-spacing: 0; font-weight: 600; opacity: .95; }
+.siren-detail { margin: 8px 2px 0; font-size: 12px; color: var(--quiet); }
 .muted { color: var(--quiet); font-size: 13px; line-height: 1.5; }
 .card { background: var(--panel); border: 1px solid var(--hair); border-radius: 16px; padding: 14px 16px; margin-bottom: 12px; }
 .who { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
@@ -128,6 +143,12 @@ function ago(ts) {
   return Math.floor(min / 60) + " год";
 }
 let tab = "home", q = "", cat = "Усі", messages = [];
+let alertStatus = { level: "clear", title: "Немає тривоги", where: "Київ", detail: "перевіряємо…" };
+function sirenBlock() {
+  const a = alertStatus || {};
+  const level = a.level === "red" || a.level === "yellow" ? a.level : "clear";
+  return '<div class="siren ' + level + '"><span class="pulse"></span><span>' + (a.title || "Статус") + '</span><span class="where">· ' + (a.where || "Київ") + '</span></div><p class="siren-detail">' + (a.detail || "") + "</p>";
+}
 function card(m) {
   return '<article class="card"><div class="who"><div class="ava">' + m.s.initials + '</div><div><b>' + m.s.title + '</b><br><small class="muted">' + ago(m.t) + ' · ' + m.s.cat + '</small></div></div><p>' + m.text + '</p><p class="muted"><a href="' + (m.url || ("https://t.me/" + m.s.user)) + '" target="_blank" rel="noreferrer">Відкрити в Telegram</a></p></article>';
 }
@@ -144,7 +165,7 @@ function render() {
   const list = filtered();
   let main = "";
   if (tab === "home") {
-    main = '<div class="hero"><div class="kicker">Огляд</div><h3 style="margin:6px 0 0">Наживо по Києву</h3><p class="muted">' + messages.length + " повідомлень з Telegram</p></div>" + list.slice(0, 8).map(card).join("");
+    main = '<div class="hero"><div class="hero-top"><div><div class="kicker">Огляд</div><h3 style="margin:6px 0 0">Наживо по Києву</h3></div></div>' + sirenBlock() + '<p class="muted" style="margin:10px 2px 0">' + messages.length + " повідомлень з Telegram</p></div>" + list.slice(0, 8).map(card).join("");
   } else if (tab === "feed") {
     main = list.map(card).join("") || '<p class="muted">Чекаємо пости…</p>';
   } else if (tab === "sources") {
@@ -181,6 +202,7 @@ async function loadFeed() {
     const data = await (await fetch("/api/feed")).json();
     if (data.ok && data.messages && data.messages.length) {
       messages = data.messages;
+      if (data.alert) alertStatus = data.alert;
       render();
     }
   } catch (e) {}
