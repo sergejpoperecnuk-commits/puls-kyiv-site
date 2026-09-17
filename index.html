@@ -108,8 +108,6 @@ button:not(:disabled) { cursor: pointer; }
 .hero { background: var(--panel); border: 1px solid var(--hair); border-radius: 16px; padding: 16px; margin-bottom: 18px; }
 .hero h3 { margin: 0; font-size: 17px; }
 .city-head { display: flex; align-items: center; gap: 8px; margin: 6px 0 0; }
-.city-name { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.byline { margin: 0; font-size: 10px; font-weight: 500; letter-spacing: .04em; color: rgb(236 236 232 / .4); }
 .motherland { width: 20px; height: 26px; color: var(--signal); flex-shrink: 0; }
 .hero-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .live {
@@ -352,7 +350,7 @@ function statsGrid() {
 function heroBlock() {
   const latest = messages[0];
   const lastLine = latest ? ("Останнє · " + ago(latest.t) + " · " + latest.s.title) : "Відкриті Telegram-канали зі списку джерел";
-  return '<div class="hero"><div class="hero-top"><div><div class="kicker">Огляд</div><div class="city-head">' + motherlandMark() + '<div class="city-name"><h3>Київ</h3><p class="byline">created by Poperechiuk_S</p></div></div><p class="muted" style="margin:6px 0 0">' + lastLine + "</p></div>" + liveBadge() + "</div>" + sirenBlock() + statsGrid() + "</div>";
+  return '<div class="hero"><div class="hero-top"><div><div class="kicker">Огляд</div><div class="city-head">' + motherlandMark() + "<h3>Київ</h3></div><p class=\"muted\" style=\"margin:6px 0 0\">" + lastLine + "</p></div>" + liveBadge() + "</div>" + sirenBlock() + statsGrid() + "</div>";
 }
 function pushOn() {
   return localStorage.getItem("pulse-push") === "1" && typeof Notification !== "undefined" && Notification.permission === "granted";
@@ -694,6 +692,7 @@ function render() {
       '<p class="muted" style="margin:10px 2px 0">Сирена 10 секунд і пуш. Напис ТЕСТ. Справжню тривогу не оголошує.</p>' +
       '<div class="card" style="margin-top:16px"><p class="muted" style="margin:0">Оновлення з публічних Telegram-каналів кожні 15 с. Свайп зверху вниз — оновити зараз.</p></div>' +
       '<div class="card" style="margin-top:12px"><p style="margin:0 0 8px"><b>Приватність</b></p><p class="muted" style="margin:0">Ця програма не використовує геодані, не запитує місцезнаходження і не відстежує пристрій. Налаштування зберігаються лише на вашому телефоні.</p></div>' +
+      '<div class="card" style="margin-top:12px"><p style="margin:0 0 6px"><b>Про додаток</b></p><p class="muted" style="margin:0 0 8px">Пульс Києва — цивільне оповіщення по районах.</p><p style="margin:0;font-size:15px;font-weight:600">created by Poperechiuk_S</p></div>' +
       '<div class="card" style="margin-top:12px"><p style="margin:0 0 8px"><b>На робочий екран</b></p>' +
       '<p class="muted" style="margin:0 0 10px">Тоді Пульс відкривається як звичайний додаток, без рядка браузера.</p>' +
       '<p style="margin:0 0 6px"><b>iPhone</b></p>' +
